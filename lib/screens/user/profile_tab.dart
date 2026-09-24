@@ -1,82 +1,121 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../landing_screen.dart';
+import '../../theme/app_theme.dart';
+import '../auth/login_screen.dart';
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
 
-  Future<void> _logout(BuildContext context) async {
-    await FirebaseAuth.instance.signOut();
-    if (!context.mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LandingScreen()),
-          (route) => false,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final initial = (user?.displayName?.isNotEmpty ?? false) ? user!.displayName![0].toUpperCase() : 'F';
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+          Center(
+            child: Stack(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(colors: [AppTheme.accent, AppTheme.cyan]),
+                  ),
+                  child: const CircleAvatar(
+                    radius: 46,
+                    backgroundImage: NetworkImage('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80'),
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(color: AppTheme.cyan, shape: BoxShape.circle),
+                    child: const Icon(Icons.verified, size: 16, color: Colors.black),
+                  ),
+                )
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text('Cyber Fanatic', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+          const Text('fanatic@fandomverse.app', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          const SizedBox(height: 24),
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: 20),
-            CircleAvatar(
-              radius: 40,
-              backgroundColor: const Color(0xFF8B5CF6),
-              child: Text(initial, style: const TextStyle(fontSize: 32, color: Colors.white, fontWeight: FontWeight.bold)),
+          // User Stats Row
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+            decoration: BoxDecoration(
+              color: AppTheme.card,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.border),
             ),
-            const SizedBox(height: 16),
-            Center(
-              child: Text(
-                user?.displayName ?? 'Fan',
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildStatItem('14', 'Bookmarks'),
+                Container(width: 1, height: 28, color: AppTheme.border),
+                _buildStatItem('8', 'Events'),
+                Container(width: 1, height: 28, color: AppTheme.border),
+                _buildStatItem('LEVEL 5', 'Rank'),
+              ],
             ),
-            Center(
-              child: Text(user?.email ?? '', style: TextStyle(color: Colors.white.withOpacity(0.5))),
-            ),
-            const SizedBox(height: 32),
-            const _ProfileMenuItem(icon: Icons.favorite_outline, label: 'Liked Fandoms', phase: 'Phase 3'),
-            const _ProfileMenuItem(icon: Icons.bookmark_outline, label: 'Saved Bookmarks', phase: 'Phase 6'),
-            const _ProfileMenuItem(icon: Icons.history, label: 'Purchase History', phase: 'Phase 5'),
-            const Spacer(),
-            OutlinedButton(
-              onPressed: () => _logout(context),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(52),
-                foregroundColor: Colors.redAccent,
+          ),
+          const SizedBox(height: 24),
+
+          // Action List Options
+          _buildMenuTile(Icons.bookmark_outline, 'Saved Lore Archives', () {}),
+          _buildMenuTile(Icons.notifications_none, 'Push Notifications', () {}),
+          _buildMenuTile(Icons.security, 'Account Security', () {}),
+          const SizedBox(height: 20),
+
+          // Logout Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent.withValues(alpha: 0.15),
                 side: const BorderSide(color: Colors.redAccent),
+                padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
-              child: const Text('Log Out'),
+              onPressed: () {
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+              },
+              icon: const Icon(Icons.logout, color: Colors.redAccent, size: 18),
+              label: const Text('LOG OUT', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
             ),
-          ],
-        ),
+          )
+        ],
       ),
     );
   }
-}
 
-class _ProfileMenuItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String phase;
+  Widget _buildStatItem(String val, String label) {
+    return Column(
+      children: [
+        Text(val, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.cyan)),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+      ],
+    );
+  }
 
-  const _ProfileMenuItem({required this.icon, required this.label, required this.phase});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: Colors.white70),
-      title: Text(label, style: const TextStyle(color: Colors.white)),
-      trailing: Text(phase, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+  Widget _buildMenuTile(IconData icon, String title, VoidCallback onTap) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: ListTile(
+        leading: Icon(icon, color: AppTheme.cyan, size: 20),
+        title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 13)),
+        trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 14),
+        onTap: onTap,
+      ),
     );
   }
 }

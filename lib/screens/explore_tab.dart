@@ -1,183 +1,174 @@
 import 'package:flutter/material.dart';
-import '../models/fandom.dart';
-import '../services/fandom_service.dart';
-import 'user/fandom_detail_screen.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/section_header.dart';
 
-class ExploreTab extends StatefulWidget {
+class ExploreTab extends StatelessWidget {
   const ExploreTab({super.key});
 
   @override
-  State<ExploreTab> createState() => _ExploreTabState();
-}
-
-class _ExploreTabState extends State<ExploreTab> {
-  static const _categories = ['All', 'Anime', 'Gaming', 'Comics', 'Movies & TV', 'Music', 'Sci-Fi'];
-
-  String _selectedCategory = 'All';
-  String _searchQuery = '';
-
-  @override
   Widget build(BuildContext context) {
-    return SafeArea(
+    final List<Map<String, String>> events = [
+      {
+        'title': 'Tokyo Cyber-Anime Expo 2026',
+        'date': 'OCT 14-16, 2026 • Tokyo, JP',
+        'img': 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=400&q=80',
+      },
+      {
+        'title': 'Cyberpunk Netrunner Arena',
+        'date': 'NOV 02-04, 2026 • Online',
+        'img': 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=400&q=80',
+      },
+    ];
+
+    final List<Map<String, String>> merch = [
+      {
+        'title': 'Neon Katana Prop Replica',
+        'price': '\$120.00',
+        'img': 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=300&q=80',
+      },
+      {
+        'title': 'Arasaka Vault Jacket (Limited)',
+        'price': '\$85.00',
+        'img': 'https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=300&q=80',
+      },
+    ];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Explore Fandoms',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Search and filter by fandom category',
-                  style: TextStyle(color: Colors.white.withOpacity(0.6)),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Search fandoms...',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
-                    prefixIcon: const Icon(Icons.search, color: Colors.white54),
-                  ),
-                  onChanged: (value) => setState(() => _searchQuery = value.trim().toLowerCase()),
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  height: 36,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _categories.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final category = _categories[index];
-                      final isSelected = category == _selectedCategory;
-                      return ChoiceChip(
-                        label: Text(category),
-                        selected: isSelected,
-                        onSelected: (_) => setState(() => _selectedCategory = category),
-                        selectedColor: const Color(0xFF8B5CF6),
-                        backgroundColor: const Color(0xFF16161F),
-                        labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.white70),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                          side: BorderSide(color: isSelected ? const Color(0xFF8B5CF6) : Colors.white24),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
+          // Conventions Header
+          const SectionHeader(
+            icon: Icons.confirmation_number,
+            iconColor: AppTheme.pink,
+            title: 'FANDOM CONVENTIONS',
           ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: StreamBuilder<List<Fandom>>(
-              stream: FandomService.streamFandoms(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return const _MessageState(
-                    icon: Icons.error_outline,
-                    message: 'Could not load fandoms. Check your connection.',
-                  );
-                }
-
-                final allFandoms = snapshot.data ?? [];
-                final filtered = allFandoms.where((fandom) {
-                  final matchesCategory = _selectedCategory == 'All' || fandom.category == _selectedCategory;
-                  final matchesSearch = _searchQuery.isEmpty || fandom.name.toLowerCase().contains(_searchQuery);
-                  return matchesCategory && matchesSearch;
-                }).toList();
-
-                if (filtered.isEmpty) {
-                  return _MessageState(
-                    icon: Icons.search_off,
-                    message: allFandoms.isEmpty
-                        ? 'No fandoms have been added yet.'
-                        : 'No fandoms match your search.',
-                  );
-                }
-
-                return GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 14,
-                    childAspectRatio: 0.95,
-                  ),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    final fandom = filtered[index];
-                    final color = Fandom.colorFor(fandom.category);
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(18),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => FandomDetailScreen(fandom: fandom)),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: color.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: color.withOpacity(0.4)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Fandom.iconFor(fandom.category), color: color, size: 30),
-                            const Spacer(),
-                            Text(
-                              fandom.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
+          const SizedBox(height: 12),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: events.length,
+            itemBuilder: (context, idx) {
+              final ev = events[idx];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.card,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(ev['img']!, width: 75, height: 75, fit: BoxFit.cover),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(ev['title']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+                          const SizedBox(height: 4),
+                          Text(ev['date']!, style: const TextStyle(fontSize: 10, color: AppTheme.cyan)),
+                          const SizedBox(height: 8),
+                          ElevatedButton(
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Pass reserved! Check your email.')),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.pink.withOpacity(0.2),
+                              side: const BorderSide(color: AppTheme.pink),
+                              minimumSize: const Size(90, 28),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                            const SizedBox(height: 4),
-                            Text(fandom.category, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                          ],
-                        ),
+                            child: const Text('Get Pass', style: TextStyle(fontSize: 11, color: AppTheme.pink, fontWeight: FontWeight.bold)),
+                          )
+                        ],
                       ),
-                    );
-                  },
-                );
-              },
-            ),
+                    )
+                  ],
+                ),
+              );
+            },
           ),
+          const SizedBox(height: 20),
+
+          // Official Merch Header
+          const SectionHeader(
+            icon: Icons.shopping_bag,
+            iconColor: AppTheme.cyan,
+            title: 'OFFICIAL MERCHANDISE',
+          ),
+          const SizedBox(height: 12),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 0.75,
+            ),
+            itemCount: merch.length,
+            itemBuilder: (context, idx) {
+              final item = merch[idx];
+              return Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.card,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                        child: Image.network(item['img']!, width: double.infinity, fit: BoxFit.cover),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item['title']!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(item['price']!, style: const TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.bold, fontSize: 12)),
+                              IconButton(
+                                constraints: const BoxConstraints(),
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.add_shopping_cart, size: 18, color: Colors.white),
+                                onPressed: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('${item['title']} added to cart!')),
+                                  );
+                                },
+                              )
+                            ],
+                          )
+                        ],
+                      ),
+                    )
+                  ],
+                ),
+              );
+            },
+          )
         ],
-      ),
-    );
-  }
-}
-
-class _MessageState extends StatelessWidget {
-  final IconData icon;
-  final String message;
-
-  const _MessageState({required this.icon, required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: Colors.white24),
-            const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54)),
-          ],
-        ),
       ),
     );
   }

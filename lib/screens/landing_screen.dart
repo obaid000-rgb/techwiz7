@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import 'auth/login_screen.dart';
 
 class LandingScreen extends StatelessWidget {
@@ -7,97 +8,48 @@ class LandingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0B12),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: IntrinsicHeight(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.auto_awesome, size: 56, color: Color(0xFFFFC857)),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'FANDOM VERSE',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          letterSpacing: 1.5,
-                        ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.network(
+              'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=800&q=80',
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withOpacity(0.75),
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('FANDOM VERSE', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 2)),
+                  const Text('Pocket Edition', style: TextStyle(fontSize: 14, color: AppTheme.cyan)),
+                  const SizedBox(height: 12),
+                  const Text('Explore lore, track conventions, and collect merch.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.cyan,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'POCKET EDITION',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withOpacity(0.6),
-                          letterSpacing: 4,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        'Your favorite fandoms, all in one place.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: Colors.white.withOpacity(0.55),
-                        ),
-                      ),
-                      const Spacer(),
-                      const SizedBox(height: 40),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 54,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const LoginScreen()),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF8B5CF6),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                          ),
-                          child: const Text('Enter as Fan'),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 54,
-                        child: OutlinedButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Admin module coming in a later phase.')),
-                            );
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white30),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                          ),
-                          child: const Text('Admin Access'),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  ),
-                ),
+                      onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen())),
+                      child: const Text('GET STARTED', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                    ),
+                  )
+                ],
               ),
-            );
-          },
-        ),
+            ),
+          )
+        ],
       ),
     );
   }
