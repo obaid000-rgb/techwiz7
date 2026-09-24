@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../widgets/trending_carousel.dart';
+import 'beginner_fan_hub_screen.dart';
 
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
@@ -26,16 +27,27 @@ class HomeTab extends StatelessWidget {
           const SizedBox(height: 24),
           const TrendingCarousel(),
           const SizedBox(height: 28),
-          const _SectionPlaceholder(
-            title: 'Beginner Fan Hub',
-            subtitle: 'Glossary and starter guides for new fans — coming in Phase 3',
-            icon: Icons.school_outlined,
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BeginnerFanHubScreen()),
+              );
+            },
+            child: const _SectionCard(
+              title: 'Beginner Fan Hub',
+              subtitle: 'New here? Start with the Glossary and starter guides',
+              icon: Icons.school_outlined,
+              enabled: true,
+            ),
           ),
           const SizedBox(height: 16),
-          const _SectionPlaceholder(
+          const _SectionCard(
             title: 'Latest News & Stories',
             subtitle: 'News, media, and deep-dive content — coming in Phase 3',
             icon: Icons.article_outlined,
+            enabled: false,
           ),
         ],
       ),
@@ -43,15 +55,23 @@ class HomeTab extends StatelessWidget {
   }
 }
 
-class _SectionPlaceholder extends StatelessWidget {
+class _SectionCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final IconData icon;
+  final bool enabled;
 
-  const _SectionPlaceholder({required this.title, required this.subtitle, required this.icon});
+  const _SectionCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.enabled,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final accent = enabled ? const Color(0xFF8B5CF6) : Colors.white24;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -60,7 +80,7 @@ class _SectionPlaceholder extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFF8B5CF6), size: 28),
+          Icon(icon, color: accent, size: 28),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -72,6 +92,7 @@ class _SectionPlaceholder extends StatelessWidget {
               ],
             ),
           ),
+          if (enabled) const Icon(Icons.chevron_right, color: Colors.white54),
         ],
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'home_tab.dart';
 import 'profile_tab.dart';
+import '../explore_tab.dart';
 
 class FanHomeScreen extends StatefulWidget {
   const FanHomeScreen({super.key});
@@ -14,7 +15,7 @@ class _FanHomeScreenState extends State<FanHomeScreen> {
 
   final List<Widget> _tabs = const [
     HomeTab(),
-    _ComingSoonTab(title: 'Explore', icon: Icons.explore_outlined, phase: 'Phase 3'),
+    ExploreTab(),
     _ComingSoonTab(title: 'Events', icon: Icons.event_outlined, phase: 'Phase 4'),
     _ComingSoonTab(title: 'Store', icon: Icons.storefront_outlined, phase: 'Phase 5'),
     ProfileTab(),
@@ -38,6 +39,7 @@ class _FanHomeScreenState extends State<FanHomeScreen> {
     );
   }
 }
+
 class _ComingSoonTab extends StatelessWidget {
   final String title;
   final IconData icon;

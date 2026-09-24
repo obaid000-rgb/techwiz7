@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/validators.dart';
-import '../../main.dart';
+import '../user/fan_home_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -42,7 +42,7 @@ class _SignupScreenState extends State<SignupScreen> {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const FanHomePlaceholder()),
+        MaterialPageRoute(builder: (_) => const FanHomeScreen()),
       );
     } on FirebaseAuthException catch (e) {
       _showError(Validators.authErrorMessage(e.code));
