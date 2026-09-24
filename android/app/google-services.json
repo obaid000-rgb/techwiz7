@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "65975142578",
+    "project_id": "fandom-verse-pocket-2026",
+    "storage_bucket": "fandom-verse-pocket-2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:65975142578:android:98fa18fa8956021900a1ab",
+        "android_client_info": {
+          "package_name": "com.example.fandom_verse"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBHNU9G8vGttR4Z1Ocn6coI7Wtm2MAo6rI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
