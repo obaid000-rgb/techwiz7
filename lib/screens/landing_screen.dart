@@ -17,9 +17,7 @@ class LandingScreen extends StatelessWidget {
             ),
           ),
           Positioned.fill(
-            child: Container(
-              color: Colors.black.withOpacity(0.75),
-            ),
+            child: Container(color: Colors.black.withValues(alpha: 0.75)),
           ),
           SafeArea(
             child: Padding(
@@ -28,10 +26,24 @@ class LandingScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('FANDOM VERSE', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 2)),
-                  const Text('Pocket Edition', style: TextStyle(fontSize: 14, color: AppTheme.cyan)),
+                  const Text(
+                    'FANDOM VERSE',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  const Text(
+                    'Pocket Edition',
+                    style: TextStyle(fontSize: 14, color: AppTheme.cyan),
+                  ),
                   const SizedBox(height: 12),
-                  const Text('Explore lore, track conventions, and collect merch.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  const Text(
+                    'Explore lore, track conventions, and collect merch.',
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
                   const SizedBox(height: 28),
                   SizedBox(
                     width: double.infinity,
@@ -39,16 +51,27 @@ class LandingScreen extends StatelessWidget {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.cyan,
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                       ),
-                      onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen())),
-                      child: const Text('GET STARTED', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                      onPressed: () => Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      ),
+                      child: const Text(
+                        'GET STARTED',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
-          )
+          ),
         ],
       ),
     );

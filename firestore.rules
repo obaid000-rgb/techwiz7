@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    // Server-side admin check — reads the caller's own Firestore document.
+    // This is the real enforcement layer; client-side route guards are UI only.
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ── Users collection ─────────────────────────────────────────────────────
+
+    match /users/{uid} {
+      // A user can read their own document; admins can read any.
+      allow read: if isOwner(uid) || isAdmin();
+
+      // New documents created by the owner must have role == 'fan'.
+      // Admins are only ever created manually via the Firebase console —
+      // the app itself can never self-grant an admin role.
+      allow create: if isOwner(uid) && request.resource.data.role == 'fan';
+
+      // Owners can update any field EXCEPT role (prevents self-promotion).
+      // Admins can update any field including role (for granting/revoking admin).
+      allow update: if isAdmin() ||
+                       (isOwner(uid) && request.resource.data.role == resource.data.role);
+
+      allow delete: if isAdmin();
+    }
+
+    // ── Content collections (read-public, write-admin) ────────────────────────
+
+    match /fandoms/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /events/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /glossary/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Admin-managed content (read-public, write-admin) ──────────────────────
+
+    match /posts/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /merchandise/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /categories/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Catch-all ─────────────────────────────────────────────────────────────
+
+    match /{document=**} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

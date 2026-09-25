@@ -1,9 +1,28 @@
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
-import '../auth/login_screen.dart';
+import '../../widgets/guest_prompt.dart';
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<UserData?>(
+      valueListenable: AuthService.instance.userNotifier,
+      builder: (context, user, _) {
+        if (user == null) {
+          return const GuestPrompt(feature: 'Your profile and saved content');
+        }
+        return _ProfileContent(user: user);
+      },
+    );
+  }
+}
+
+class _ProfileContent extends StatelessWidget {
+  final UserData user;
+  const _ProfileContent({required this.user});
 
   @override
   Widget build(BuildContext context) {
@@ -21,9 +40,16 @@ class ProfileTab extends StatelessWidget {
                     shape: BoxShape.circle,
                     gradient: LinearGradient(colors: [AppTheme.accent, AppTheme.cyan]),
                   ),
-                  child: const CircleAvatar(
+                  child: CircleAvatar(
                     radius: 46,
-                    backgroundImage: NetworkImage('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80'),
+                    backgroundImage: user.avatarUrl.isNotEmpty
+                        ? NetworkImage(user.avatarUrl)
+                        : null,
+                    backgroundColor: AppTheme.card,
+                    child: user.avatarUrl.isEmpty
+                        ? Text(user.name[0].toUpperCase(),
+                            style: AppTheme.orbitron(size: 32, weight: FontWeight.w900))
+                        : null,
                   ),
                 ),
                 Positioned(
@@ -34,16 +60,18 @@ class ProfileTab extends StatelessWidget {
                     decoration: const BoxDecoration(color: AppTheme.cyan, shape: BoxShape.circle),
                     child: const Icon(Icons.verified, size: 16, color: Colors.black),
                   ),
-                )
+                ),
               ],
             ),
           ),
           const SizedBox(height: 14),
-          const Text('Cyber Fanatic', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-          const Text('fanatic@fandomverse.app', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          Text(user.name,
+              style: AppTheme.orbitron(size: 18, weight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(user.email, style: AppTheme.inter(size: 12, color: Colors.grey)),
           const SizedBox(height: 24),
 
-          // User Stats Row
+          // Stats row
           Container(
             padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
             decoration: BoxDecoration(
@@ -54,23 +82,22 @@ class ProfileTab extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatItem('14', 'Bookmarks'),
+                _stat('${user.bookmarks}', 'Bookmarks'),
                 Container(width: 1, height: 28, color: AppTheme.border),
-                _buildStatItem('8', 'Events'),
+                _stat('${user.savedEvents}', 'Events'),
                 Container(width: 1, height: 28, color: AppTheme.border),
-                _buildStatItem('LEVEL 5', 'Rank'),
+                _stat(user.rank, 'Rank'),
               ],
             ),
           ),
           const SizedBox(height: 24),
 
-          // Action List Options
-          _buildMenuTile(Icons.bookmark_outline, 'Saved Lore Archives', () {}),
-          _buildMenuTile(Icons.notifications_none, 'Push Notifications', () {}),
-          _buildMenuTile(Icons.security, 'Account Security', () {}),
+          _menuTile(Icons.bookmark_outline, 'Saved Lore Archives', () {}),
+          _menuTile(Icons.notifications_none, 'Push Notifications', () {}),
+          _menuTile(Icons.security, 'Account Security', () {}),
           const SizedBox(height: 20),
 
-          // Logout Button
+          // Logout — calls signOut() only; top bar and this screen update via ValueListenableBuilder
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -80,29 +107,28 @@ class ProfileTab extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
-              onPressed: () {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
-              },
+              onPressed: () => AuthService.instance.signOut(),
               icon: const Icon(Icons.logout, color: Colors.redAccent, size: 18),
-              label: const Text('LOG OUT', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+              label: Text('LOG OUT',
+                  style: AppTheme.orbitron(size: 11, color: Colors.redAccent, weight: FontWeight.w700)),
             ),
-          )
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(String val, String label) {
+  Widget _stat(String val, String label) {
     return Column(
       children: [
-        Text(val, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.cyan)),
+        Text(val, style: AppTheme.orbitron(size: 14, color: AppTheme.cyan, weight: FontWeight.w700)),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        Text(label, style: AppTheme.inter(size: 10, color: Colors.grey)),
       ],
     );
   }
 
-  Widget _buildMenuTile(IconData icon, String title, VoidCallback onTap) {
+  Widget _menuTile(IconData icon, String title, VoidCallback onTap) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -112,7 +138,7 @@ class ProfileTab extends StatelessWidget {
       ),
       child: ListTile(
         leading: Icon(icon, color: AppTheme.cyan, size: 20),
-        title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 13)),
+        title: Text(title, style: AppTheme.inter(size: 13)),
         trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 14),
         onTap: onTap,
       ),

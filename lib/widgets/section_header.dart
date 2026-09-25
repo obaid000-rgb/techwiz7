@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 class SectionHeader extends StatelessWidget {
   final IconData icon;
@@ -23,22 +24,11 @@ class SectionHeader extends StatelessWidget {
           children: [
             Icon(icon, color: iconColor, size: 16),
             const SizedBox(width: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                letterSpacing: 1.1,
-                color: Colors.white,
-              ),
-            ),
+            Text(title, style: AppTheme.orbitron(size: 10, letterSpacing: 0.8)),
           ],
         ),
         if (trailingText != null)
-          Text(
-            trailingText!,
-            style: const TextStyle(color: Color(0xFF06B6D4), fontSize: 11),
-          ),
+          Text(trailingText!, style: AppTheme.inter(size: 11, color: AppTheme.cyan)),
       ],
     );
   }

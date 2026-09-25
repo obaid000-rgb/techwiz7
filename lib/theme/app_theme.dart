@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   static const Color bg = Color(0xFF0D0E15);
@@ -8,6 +9,32 @@ class AppTheme {
   static const Color cyan = Color(0xFF06B6D4);
   static const Color orange = Color(0xFFF97316);
   static const Color pink = Color(0xFFEC4899);
+
+  static TextStyle orbitron({
+    double size = 13,
+    FontWeight weight = FontWeight.w700,
+    Color color = Colors.white,
+    double? letterSpacing,
+  }) =>
+      GoogleFonts.orbitron(
+        fontSize: size,
+        fontWeight: weight,
+        color: color,
+        letterSpacing: letterSpacing,
+      );
+
+  static TextStyle inter({
+    double size = 13,
+    FontWeight weight = FontWeight.w400,
+    Color color = Colors.white,
+    double? height,
+  }) =>
+      GoogleFonts.inter(
+        fontSize: size,
+        fontWeight: weight,
+        color: color,
+        height: height,
+      );
 
   static ThemeData get darkTheme {
     return ThemeData.dark().copyWith(
@@ -22,7 +49,7 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: card,
-        hintStyle: const TextStyle(color: Colors.grey, fontSize: 13),
+        hintStyle: GoogleFonts.inter(color: Colors.grey, fontSize: 13),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
