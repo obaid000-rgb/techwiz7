@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import '../../services/post_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/guest_prompt.dart';
 import '../../widgets/image_upload_field.dart';
+import 'offline_downloads_screen.dart';
+import 'post_list_screen.dart';
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
@@ -32,18 +35,70 @@ class _ProfileContent extends StatefulWidget {
 
 class _ProfileContentState extends State<_ProfileContent> {
   Future<void> _onAvatarUploaded(String url) async {
-    final u = widget.user;
-    final updated = UserData(
-      uid: u.uid,
-      name: u.name,
-      email: u.email,
-      avatarUrl: url,
-      savedEvents: u.savedEvents,
-      bookmarks: u.bookmarks,
-      rank: u.rank,
-      role: u.role,
-      categories: u.categories,
+    final updated = widget.user.copyWith(avatarUrl: url);
+    try {
+      await UserService.instance.updateUser(updated);
+    } catch (_) {}
+    AuthService.instance.userNotifier.value = updated;
+  }
+
+  Future<void> _editBio() async {
+    final ctrl = TextEditingController(text: widget.user.bio);
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 16,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Edit Bio', style: AppTheme.orbitron(size: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              maxLines: 3,
+              maxLength: 160,
+              style: AppTheme.inter(size: 13, color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Tell other fans a bit about yourself…',
+                filled: true,
+                fillColor: AppTheme.bg,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppTheme.border)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.cyan,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Text('SAVE',
+                    style: AppTheme.orbitron(size: 10, color: Colors.black)),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
+    if (result == null) return;
+    final updated = widget.user.copyWith(bio: result);
     try {
       await UserService.instance.updateUser(updated);
     } catch (_) {}
@@ -70,7 +125,59 @@ class _ProfileContentState extends State<_ProfileContent> {
               style: AppTheme.orbitron(size: 18, weight: FontWeight.w700)),
           const SizedBox(height: 4),
           Text(user.email, style: AppTheme.inter(size: 12, color: Colors.grey)),
-          const SizedBox(height: 24),
+          if (user.badge.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppTheme.cyan.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.military_tech, color: AppTheme.cyan, size: 13),
+                  const SizedBox(width: 5),
+                  Text(user.badge,
+                      style: AppTheme.orbitron(size: 9, color: AppTheme.cyan)),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 18),
+
+          // Bio
+          GestureDetector(
+            onTap: _editBio,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.border),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      user.bio.isEmpty ? 'Add a bio…' : user.bio,
+                      style: AppTheme.inter(
+                        size: 12,
+                        color: user.bio.isEmpty ? Colors.grey : Colors.white70,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.edit_outlined, color: Colors.grey, size: 15),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
 
           // Stats row
           Container(
@@ -83,7 +190,7 @@ class _ProfileContentState extends State<_ProfileContent> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _stat('${user.bookmarks}', 'Bookmarks'),
+                _stat('${user.bookmarkedPostIds.length}', 'Liked'),
                 Container(width: 1, height: 28, color: AppTheme.border),
                 _stat('${user.savedEvents}', 'Events'),
                 Container(width: 1, height: 28, color: AppTheme.border),
@@ -93,7 +200,31 @@ class _ProfileContentState extends State<_ProfileContent> {
           ),
           const SizedBox(height: 24),
 
-          _menuTile(Icons.bookmark_outline, 'Saved Lore Archives', () {}),
+          _menuTile(
+            Icons.bookmark_outline,
+            'Liked Fandoms',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => PostListScreen(
+                  title: 'Liked Fandoms',
+                  stream: PostService.instance.watchPosts().map((posts) => posts
+                      .where((p) => user.bookmarkedPostIds.contains(p.id))
+                      .toList()),
+                  emptyMessage:
+                      'No liked fandoms yet — bookmark posts from Home to see them here.',
+                ),
+              ),
+            ),
+          ),
+          _menuTile(
+            Icons.download_for_offline_outlined,
+            'Downloads',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const OfflineDownloadsScreen()),
+            ),
+          ),
           _menuTile(Icons.notifications_none, 'Push Notifications', () {}),
           _menuTile(Icons.security, 'Account Security', () {}),
           const SizedBox(height: 20),

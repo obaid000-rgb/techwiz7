@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../models/event_item.dart';
 import '../../services/event_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/category_picker_field.dart';
 import '../../widgets/image_upload_field.dart';
+import '../../widgets/location_picker_field.dart';
 
 class EventFormScreen extends StatefulWidget {
   final EventItem? existing;
@@ -20,6 +22,9 @@ class _EventFormScreenState extends State<EventFormScreen> {
   final _priceCtr = TextEditingController();
   DateTime _date = DateTime.now();
   String _imageUrl = '';
+  String? _category;
+  double? _latitude;
+  double? _longitude;
   bool _saving = false;
   String? _error;
 
@@ -35,6 +40,9 @@ class _EventFormScreenState extends State<EventFormScreen> {
       _priceCtr.text = e.ticketPrice;
       _date = e.date;
       _imageUrl = e.imageUrl;
+      _category = e.category.isEmpty ? null : e.category;
+      _latitude = e.latitude;
+      _longitude = e.longitude;
     }
   }
 
@@ -89,6 +97,26 @@ class _EventFormScreenState extends State<EventFormScreen> {
               ),
             _label('Event Title'),
             _textField(_titleCtr, hint: 'Convention / concert name'),
+            const SizedBox(height: 16),
+            _label('Category'),
+            CategoryPickerField(
+              value: _category,
+              accentColor: AppTheme.pink,
+              onChanged: (v) => setState(() => _category = v),
+            ),
+            const SizedBox(height: 16),
+            _label('Location (tap map to place a pin)'),
+            LocationPickerField(
+              initialLat: _latitude,
+              initialLng: _longitude,
+              onLocationPicked: (lat, lng, city) {
+                setState(() {
+                  _latitude = lat;
+                  _longitude = lng;
+                  if (city != null && city.isNotEmpty) _cityCtr.text = city;
+                });
+              },
+            ),
             const SizedBox(height: 16),
             _label('City'),
             _textField(_cityCtr, hint: 'Tokyo, London, New York…'),
@@ -146,8 +174,8 @@ class _EventFormScreenState extends State<EventFormScreen> {
 
   Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
-        child:
-            Text(text, style: AppTheme.inter(size: 12, color: Colors.grey)),
+        child: Text(text,
+            style: AppTheme.inter(size: 12, color: Colors.grey)),
       );
 
   Widget _textField(TextEditingController ctrl,
@@ -194,7 +222,8 @@ class _EventFormScreenState extends State<EventFormScreen> {
         },
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: AppTheme.card,
             borderRadius: BorderRadius.circular(12),
@@ -237,6 +266,9 @@ class _EventFormScreenState extends State<EventFormScreen> {
         ticketLink: _linkCtr.text.trim(),
         ticketPrice: _priceCtr.text.trim(),
         imageUrl: _imageUrl,
+        category: _category ?? '',
+        latitude: _latitude,
+        longitude: _longitude,
       );
       if (widget.existing == null) {
         await EventService.instance.addEvent(event);

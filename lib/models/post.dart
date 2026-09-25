@@ -1,5 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Matches the SRS Resources requirement's four content types exactly.
+const List<String> kPostContentTypes = ['News', 'Gallery', 'Video', 'Podcast'];
+
+/// '' = untagged (shows under "All" only, not under either depth filter).
+const List<String> kPostContentDepths = ['beginner', 'deep'];
+
 class Post {
   final String id;
   final String title;
@@ -7,6 +13,11 @@ class Post {
   final String content;
   final String imageUrl;
   final DateTime createdAt;
+  final String contentType; // News | Gallery | Video | Podcast
+  final bool isFandomOfTheDay;
+  final String status; // 'active' | 'inactive'
+  final String? youtubeUrl;
+  final String contentDepth; // '' | 'beginner' | 'deep'
 
   const Post({
     required this.id,
@@ -15,7 +26,15 @@ class Post {
     required this.content,
     this.imageUrl = '',
     required this.createdAt,
+    this.contentType = 'News',
+    this.isFandomOfTheDay = false,
+    this.status = 'active',
+    this.youtubeUrl,
+    this.contentDepth = '',
   });
+
+  bool get isActive => status == 'active';
+  bool get hasVideo => youtubeUrl != null && youtubeUrl!.isNotEmpty;
 
   factory Post.fromMap(Map<String, dynamic> map, String docId) => Post(
         id: docId,
@@ -24,6 +43,16 @@ class Post {
         content: map['content'] ?? '',
         imageUrl: map['imageUrl'] ?? '',
         createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        // Posts created before this field existed fall back to 'News'.
+        contentType: kPostContentTypes.contains(map['contentType'])
+            ? map['contentType'] as String
+            : 'News',
+        isFandomOfTheDay: map['isFandomOfTheDay'] as bool? ?? false,
+        status: (map['status'] as String?) ?? 'active',
+        youtubeUrl: map['youtubeUrl'] as String?,
+        contentDepth: kPostContentDepths.contains(map['contentDepth'])
+            ? map['contentDepth'] as String
+            : '',
       );
 
   Map<String, dynamic> toMap() => {
@@ -32,6 +61,11 @@ class Post {
         'content': content,
         'imageUrl': imageUrl,
         'createdAt': Timestamp.fromDate(createdAt),
+        'contentType': contentType,
+        'isFandomOfTheDay': isFandomOfTheDay,
+        'status': status,
+        'contentDepth': contentDepth,
+        if (youtubeUrl != null) 'youtubeUrl': youtubeUrl,
       };
 
   Post copyWith({
@@ -39,6 +73,12 @@ class Post {
     String? category,
     String? content,
     String? imageUrl,
+    String? contentType,
+    bool? isFandomOfTheDay,
+    String? status,
+    String? youtubeUrl,
+    bool clearYoutubeUrl = false,
+    String? contentDepth,
   }) =>
       Post(
         id: id,
@@ -47,5 +87,10 @@ class Post {
         content: content ?? this.content,
         imageUrl: imageUrl ?? this.imageUrl,
         createdAt: createdAt,
+        contentType: contentType ?? this.contentType,
+        isFandomOfTheDay: isFandomOfTheDay ?? this.isFandomOfTheDay,
+        status: status ?? this.status,
+        youtubeUrl: clearYoutubeUrl ? null : (youtubeUrl ?? this.youtubeUrl),
+        contentDepth: contentDepth ?? this.contentDepth,
       );
 }

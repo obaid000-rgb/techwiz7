@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../models/app_category.dart';
 import '../../models/post.dart';
-import '../../services/category_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/youtube_utils.dart';
+import '../../widgets/category_picker_field.dart';
 import '../../widgets/image_upload_field.dart';
 
 class PostFormScreen extends StatefulWidget {
@@ -17,11 +17,17 @@ class PostFormScreen extends StatefulWidget {
 class _PostFormScreenState extends State<PostFormScreen> {
   final _titleCtr = TextEditingController();
   final _contentCtr = TextEditingController();
+  final _youtubeUrlCtr = TextEditingController();
   String? _category;
   String _imageUrl = '';
+  String _contentType = 'News';
+  String _status = 'active';
+  String _contentDepth = '';
+  bool _isFandomOfTheDay = false;
   bool _saving = false;
   String? _error;
-  List<AppCategory> _categories = [];
+  String? _youtubeVideoId;
+  String? _youtubeFieldError;
 
   @override
   void initState() {
@@ -32,19 +38,36 @@ class _PostFormScreenState extends State<PostFormScreen> {
       _contentCtr.text = e.content;
       _imageUrl = e.imageUrl;
       _category = e.category.isEmpty ? null : e.category;
+      _contentType = e.contentType;
+      _status = e.status;
+      _contentDepth = e.contentDepth;
+      _isFandomOfTheDay = e.isFandomOfTheDay;
+      _youtubeUrlCtr.text = e.youtubeUrl ?? '';
+      _youtubeVideoId = extractYoutubeVideoId(_youtubeUrlCtr.text);
     }
-    _loadCategories();
+    _youtubeUrlCtr.addListener(_onYoutubeUrlChanged);
   }
 
-  Future<void> _loadCategories() async {
-    final cats = await CategoryService.instance.fetchCategories();
-    if (mounted) setState(() => _categories = cats);
+  void _onYoutubeUrlChanged() {
+    final text = _youtubeUrlCtr.text.trim();
+    setState(() {
+      if (text.isEmpty) {
+        _youtubeVideoId = null;
+        _youtubeFieldError = null;
+        return;
+      }
+      final id = extractYoutubeVideoId(text);
+      _youtubeVideoId = id;
+      _youtubeFieldError =
+          id == null ? 'That doesn\'t look like a valid YouTube link.' : null;
+    });
   }
 
   @override
   void dispose() {
     _titleCtr.dispose();
     _contentCtr.dispose();
+    _youtubeUrlCtr.dispose();
     super.dispose();
   }
 
@@ -65,7 +88,8 @@ class _PostFormScreenState extends State<PostFormScreen> {
             style: AppTheme.orbitron(size: 13)),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: AppTheme.cyan.withValues(alpha: 0.3)),
+          child: Container(
+              height: 1, color: AppTheme.cyan.withValues(alpha: 0.3)),
         ),
       ),
       body: SingleChildScrollView(
@@ -83,13 +107,18 @@ class _PostFormScreenState extends State<PostFormScreen> {
                   border: Border.all(color: Colors.redAccent),
                 ),
                 child: Text(_error!,
-                    style: AppTheme.inter(size: 12, color: Colors.redAccent)),
+                    style: AppTheme.inter(
+                        size: 12, color: Colors.redAccent)),
               ),
             _label('Title'),
             _textField(_titleCtr, hint: 'Enter lore post title'),
             const SizedBox(height: 16),
             _label('Category'),
-            _categoryDropdown(),
+            CategoryPickerField(
+              value: _category,
+              accentColor: AppTheme.cyan,
+              onChanged: (v) => setState(() => _category = v),
+            ),
             const SizedBox(height: 16),
             _label('Content'),
             _textField(_contentCtr,
@@ -101,6 +130,80 @@ class _PostFormScreenState extends State<PostFormScreen> {
               onUploaded: (url) => setState(() => _imageUrl = url),
               accentColor: AppTheme.cyan,
             ),
+            const SizedBox(height: 16),
+            _label('YouTube URL (optional)'),
+            _textField(_youtubeUrlCtr,
+                hint: 'https://www.youtube.com/watch?v=… or https://youtu.be/…'),
+            if (_youtubeFieldError != null) ...[
+              const SizedBox(height: 6),
+              Text(_youtubeFieldError!,
+                  style: AppTheme.inter(size: 11, color: Colors.redAccent)),
+            ],
+            if (_youtubeVideoId != null) ...[
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Image.network(
+                      youtubeThumbnailUrl(_youtubeVideoId!),
+                      height: 160,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (ctx, err, st) => Container(
+                        height: 160,
+                        color: AppTheme.card,
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.broken_image_outlined,
+                            color: Colors.white24, size: 32),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.play_arrow,
+                          color: Colors.white, size: 28),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            _label('Content Type'),
+            _dropdown(
+              _contentType,
+              kPostContentTypes
+                  .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                  .toList(),
+              (val) => setState(() => _contentType = val ?? _contentType),
+            ),
+            const SizedBox(height: 16),
+            _label('Status'),
+            _dropdown(
+              _status,
+              const [
+                DropdownMenuItem(value: 'active', child: Text('Active')),
+                DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
+              ],
+              (val) => setState(() => _status = val ?? _status),
+            ),
+            const SizedBox(height: 16),
+            _label('Depth (Beginner / Deep Dive filter)'),
+            _dropdown(
+              _contentDepth,
+              const [
+                DropdownMenuItem(value: '', child: Text('Unset')),
+                DropdownMenuItem(value: 'beginner', child: Text('Beginner')),
+                DropdownMenuItem(value: 'deep', child: Text('Deep Dive')),
+              ],
+              (val) => setState(() => _contentDepth = val ?? _contentDepth),
+            ),
+            const SizedBox(height: 16),
+            _todaysFandomToggle(),
             const SizedBox(height: 28),
             SizedBox(
               width: double.infinity,
@@ -132,9 +235,63 @@ class _PostFormScreenState extends State<PostFormScreen> {
     );
   }
 
+  Widget _dropdown(
+    String value,
+    List<DropdownMenuItem<String>> items,
+    void Function(String?) onChanged,
+  ) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          dropdownColor: AppTheme.card,
+          underline: const SizedBox.shrink(),
+          style: AppTheme.inter(size: 13, color: Colors.white),
+          items: items,
+          onChanged: onChanged,
+        ),
+      );
+
+  Widget _todaysFandomToggle() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Today\'s Fandom',
+                      style: AppTheme.inter(
+                          size: 13, color: Colors.white, weight: FontWeight.w600)),
+                  Text('Featured as the single highlight on Explore',
+                      style: AppTheme.inter(size: 10, color: Colors.grey)),
+                ],
+              ),
+            ),
+            Switch(
+              value: _isFandomOfTheDay,
+              activeThumbColor: AppTheme.cyan,
+              onChanged: (val) => setState(() => _isFandomOfTheDay = val),
+            ),
+          ],
+        ),
+      );
+
   Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
-        child: Text(text, style: AppTheme.inter(size: 12, color: Colors.grey)),
+        child: Text(text,
+            style: AppTheme.inter(size: 12, color: Colors.grey)),
       );
 
   Widget _textField(TextEditingController ctrl,
@@ -161,36 +318,16 @@ class _PostFormScreenState extends State<PostFormScreen> {
         ),
       );
 
-  Widget _categoryDropdown() => Container(
-        decoration: BoxDecoration(
-          color: AppTheme.card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.border),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: DropdownButton<String>(
-          value: _category,
-          isExpanded: true,
-          dropdownColor: AppTheme.card,
-          underline: const SizedBox(),
-          hint: Text('Select category',
-              style: AppTheme.inter(size: 13, color: Colors.grey)),
-          style: AppTheme.inter(size: 13, color: Colors.white),
-          items: _categories
-              .map((c) => DropdownMenuItem(
-                  value: c.key,
-                  child: Text(c.name,
-                      style: AppTheme.inter(size: 13, color: Colors.white))))
-              .toList(),
-          onChanged: (v) => setState(() => _category = v),
-        ),
-      );
-
   Future<void> _save() async {
     final title = _titleCtr.text.trim();
     final content = _contentCtr.text.trim();
     if (title.isEmpty || content.isEmpty) {
       setState(() => _error = 'Title and content are required.');
+      return;
+    }
+    final youtubeText = _youtubeUrlCtr.text.trim();
+    if (youtubeText.isNotEmpty && _youtubeVideoId == null) {
+      setState(() => _error = 'Fix or clear the YouTube URL before saving.');
       return;
     }
 
@@ -206,12 +343,30 @@ class _PostFormScreenState extends State<PostFormScreen> {
         content: content,
         imageUrl: _imageUrl,
         createdAt: widget.existing?.createdAt ?? DateTime.now(),
+        contentType: _contentType,
+        status: _status,
+        contentDepth: _contentDepth,
+        youtubeUrl: youtubeText.isEmpty ? null : youtubeText,
+        // Saved as false here regardless of the toggle; setFandomOfTheDay
+        // below is what actually flips it on, so the "unset every other
+        // post" side effect always runs through one code path.
+        isFandomOfTheDay: false,
       );
+
+      String postId;
       if (widget.existing == null) {
-        await PostService.instance.addPost(post);
+        postId = await PostService.instance.addPost(post);
       } else {
+        postId = post.id;
         await PostService.instance.updatePost(post);
       }
+
+      if (_isFandomOfTheDay) {
+        await PostService.instance.setFandomOfTheDay(postId);
+      } else if (widget.existing?.isFandomOfTheDay ?? false) {
+        await PostService.instance.clearFandomOfTheDay(postId);
+      }
+
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {

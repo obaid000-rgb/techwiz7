@@ -9,6 +9,9 @@ class EventItem {
   final String ticketLink;
   final String ticketPrice;
   final String imageUrl;
+  final String category;
+  final double? latitude;
+  final double? longitude;
 
   const EventItem({
     required this.id,
@@ -19,7 +22,12 @@ class EventItem {
     this.ticketLink = '',
     this.ticketPrice = '',
     this.imageUrl = '',
+    this.category = '',
+    this.latitude,
+    this.longitude,
   });
+
+  bool get hasCoordinates => latitude != null && longitude != null;
 
   factory EventItem.fromMap(Map<String, dynamic> map, String docId) =>
       EventItem(
@@ -31,6 +39,9 @@ class EventItem {
         ticketLink: map['ticketLink'] ?? '',
         ticketPrice: map['ticketPrice'] ?? '',
         imageUrl: map['imageUrl'] ?? '',
+        category: map['category'] ?? '',
+        latitude: (map['latitude'] as num?)?.toDouble(),
+        longitude: (map['longitude'] as num?)?.toDouble(),
       );
 
   Map<String, dynamic> toMap() => {
@@ -41,6 +52,9 @@ class EventItem {
         'ticketLink': ticketLink,
         'ticketPrice': ticketPrice,
         'imageUrl': imageUrl,
+        'category': category,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
       };
 
   EventItem copyWith({
@@ -51,6 +65,9 @@ class EventItem {
     String? ticketLink,
     String? ticketPrice,
     String? imageUrl,
+    String? category,
+    double? latitude,
+    double? longitude,
   }) =>
       EventItem(
         id: id,
@@ -61,5 +78,8 @@ class EventItem {
         ticketLink: ticketLink ?? this.ticketLink,
         ticketPrice: ticketPrice ?? this.ticketPrice,
         imageUrl: imageUrl ?? this.imageUrl,
+        category: category ?? this.category,
+        latitude: latitude ?? this.latitude,
+        longitude: longitude ?? this.longitude,
       );
 }

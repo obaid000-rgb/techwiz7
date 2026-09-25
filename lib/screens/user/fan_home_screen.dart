@@ -8,7 +8,10 @@ import '../auth/login_screen.dart';
 import '../auth/signup_screen.dart';
 import '../explore_tab.dart';
 import 'home_tab.dart';
+import 'lore_tab.dart';
+import 'onboarding_screen.dart';
 import 'profile_tab.dart';
+import 'shop_tab.dart';
 
 class FanHomeScreen extends StatefulWidget {
   const FanHomeScreen({super.key});
@@ -133,16 +136,34 @@ class _FanHomeScreenState extends State<FanHomeScreen> {
                       Text(user.email,
                           style: AppTheme.inter(size: 11, color: Colors.grey)),
                       const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppTheme.accent.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppTheme.accent.withValues(alpha: 0.4)),
-                        ),
-                        child: Text(user.rank,
-                            style: AppTheme.orbitron(
-                                size: 9, color: AppTheme.accent, weight: FontWeight.w700)),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppTheme.accent.withValues(alpha: 0.4)),
+                            ),
+                            child: Text(user.rank,
+                                style: AppTheme.orbitron(
+                                    size: 9, color: AppTheme.accent, weight: FontWeight.w700)),
+                          ),
+                          if (user.badge.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppTheme.cyan.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.4)),
+                              ),
+                              child: Text(user.badge,
+                                  style: AppTheme.orbitron(
+                                      size: 9, color: AppTheme.cyan, weight: FontWeight.w700)),
+                            ),
+                        ],
                       ),
                     ],
                   ),
@@ -161,7 +182,7 @@ class _FanHomeScreenState extends State<FanHomeScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _sheetStat(Icons.bookmark_outline, '${user.bookmarks}', 'Bookmarks', AppTheme.cyan),
+                  _sheetStat(Icons.bookmark_outline, '${user.bookmarkedPostIds.length}', 'Liked', AppTheme.cyan),
                   Container(width: 1, height: 32, color: AppTheme.border),
                   _sheetStat(Icons.confirmation_number_outlined, '${user.savedEvents}', 'Events', AppTheme.pink),
                   Container(width: 1, height: 32, color: AppTheme.border),
@@ -484,11 +505,23 @@ class _FanHomeScreenState extends State<FanHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<UserData?>(
+      valueListenable: AuthService.instance.userNotifier,
+      builder: (context, user, _) {
+        if (user != null && !user.hasOnboarded) {
+          return OnboardingScreen(user: user);
+        }
+        return _buildTabs(context);
+      },
+    );
+  }
+
+  Widget _buildTabs(BuildContext context) {
     final List<Widget> tabs = [
       HomeTab(searchQuery: _searchQuery),
-      const Center(child: Text('Lore Screen', style: TextStyle(color: Colors.white))),
+      const LoreTab(),
       const ExploreTab(),
-      const Center(child: Text('Shop Screen', style: TextStyle(color: Colors.white))),
+      const ShopTab(),
       const ProfileTab(),
     ];
 

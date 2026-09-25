@@ -5,20 +5,20 @@ class GlossaryService {
   static final GlossaryService instance = GlossaryService._();
   GlossaryService._();
 
-  Future<List<GlossaryTerm>> fetchTerms() async {
-    final snapshot = await FirestoreDb.instance.collection('glossary').get();
-    return snapshot.docs
-        .map((d) => GlossaryTerm.fromMap(d.data()))
-        .toList();
-  }
+  Stream<List<GlossaryTerm>> watchTerms() => FirestoreDb.instance
+      .collection('glossary')
+      .orderBy('term')
+      .snapshots()
+      .map((s) => s.docs.map((d) => GlossaryTerm.fromMap(d.data(), d.id)).toList());
 
-  Future<List<GlossaryTerm>> fetchByCategory(String category) async {
-    final snapshot = await FirestoreDb.instance
-        .collection('glossary')
-        .where('category', isEqualTo: category)
-        .get();
-    return snapshot.docs
-        .map((d) => GlossaryTerm.fromMap(d.data()))
-        .toList();
-  }
+  Future<void> addTerm(GlossaryTerm term) =>
+      FirestoreDb.instance.collection('glossary').add(term.toMap());
+
+  Future<void> updateTerm(GlossaryTerm term) => FirestoreDb.instance
+      .collection('glossary')
+      .doc(term.id)
+      .update(term.toMap());
+
+  Future<void> deleteTerm(String id) =>
+      FirestoreDb.instance.collection('glossary').doc(id).delete();
 }

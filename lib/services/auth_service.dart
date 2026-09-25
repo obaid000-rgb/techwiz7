@@ -2,6 +2,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'firestore_db.dart';
 
+// Fixed set offered during onboarding — no existing badge art/names were
+// found anywhere in the project, so these are new.
+const List<String> kProfileBadges = [
+  'Newcomer',
+  'Enthusiast',
+  'Veteran',
+  'Collector',
+];
+
 class UserData {
   final String uid;
   final String name;
@@ -12,6 +21,9 @@ class UserData {
   final String rank;
   final String role; // 'fan' | 'admin'
   final List<String> categories;
+  final String bio;
+  final String badge; // '' = none selected (pre-onboarding-feature accounts)
+  final List<String> bookmarkedPostIds;
 
   const UserData({
     required this.uid,
@@ -23,9 +35,15 @@ class UserData {
     this.rank = 'LEVEL 1',
     this.role = 'fan',
     this.categories = const [],
+    this.bio = '',
+    this.badge = '',
+    this.bookmarkedPostIds = const [],
   });
 
   bool get isAdmin => role == 'admin';
+
+  /// Whether this account has completed onboarding (category selection).
+  bool get hasOnboarded => categories.isNotEmpty;
 
   factory UserData.fromMap(Map<String, dynamic> map, String uid) {
     return UserData(
@@ -38,6 +56,9 @@ class UserData {
       rank: map['rank'] ?? 'LEVEL 1',
       role: map['role'] ?? 'fan',
       categories: List<String>.from(map['categories'] ?? []),
+      bio: map['bio'] ?? '',
+      badge: map['badge'] ?? '',
+      bookmarkedPostIds: List<String>.from(map['bookmarkedPostIds'] ?? []),
     );
   }
 
@@ -50,7 +71,33 @@ class UserData {
         'rank': rank,
         'role': role,
         'categories': categories,
+        'bio': bio,
+        'badge': badge,
+        'bookmarkedPostIds': bookmarkedPostIds,
       };
+
+  UserData copyWith({
+    String? name,
+    String? avatarUrl,
+    List<String>? categories,
+    String? bio,
+    String? badge,
+    List<String>? bookmarkedPostIds,
+  }) =>
+      UserData(
+        uid: uid,
+        name: name ?? this.name,
+        email: email,
+        avatarUrl: avatarUrl ?? this.avatarUrl,
+        savedEvents: savedEvents,
+        bookmarks: bookmarks,
+        rank: rank,
+        role: role,
+        categories: categories ?? this.categories,
+        bio: bio ?? this.bio,
+        badge: badge ?? this.badge,
+        bookmarkedPostIds: bookmarkedPostIds ?? this.bookmarkedPostIds,
+      );
 }
 
 class AuthService {

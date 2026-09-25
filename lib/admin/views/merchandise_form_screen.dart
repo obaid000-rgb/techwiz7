@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../models/app_category.dart';
 import '../../models/merchandise.dart';
-import '../../services/category_service.dart';
 import '../../services/merchandise_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/category_picker_field.dart';
 import '../../widgets/image_upload_field.dart';
 
 class MerchandiseFormScreen extends StatefulWidget {
@@ -22,7 +21,6 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
   String _imageUrl = '';
   bool _saving = false;
   String? _error;
-  List<AppCategory> _categories = [];
 
   @override
   void initState() {
@@ -35,12 +33,6 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
       _descCtr.text = e.description;
       _category = e.category.isEmpty ? null : e.category;
     }
-    _loadCategories();
-  }
-
-  Future<void> _loadCategories() async {
-    final cats = await CategoryService.instance.fetchCategories();
-    if (mounted) setState(() => _categories = cats);
   }
 
   @override
@@ -69,8 +61,9 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
             style: AppTheme.orbitron(size: 13)),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child:
-              Container(height: 1, color: AppTheme.orange.withValues(alpha: 0.3)),
+          child: Container(
+              height: 1,
+              color: AppTheme.orange.withValues(alpha: 0.3)),
         ),
       ),
       body: SingleChildScrollView(
@@ -88,8 +81,8 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
                   border: Border.all(color: Colors.redAccent),
                 ),
                 child: Text(_error!,
-                    style:
-                        AppTheme.inter(size: 12, color: Colors.redAccent)),
+                    style: AppTheme.inter(
+                        size: 12, color: Colors.redAccent)),
               ),
             _label('Name'),
             _textField(_nameCtr, hint: 'Product name'),
@@ -101,7 +94,11 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
                     decimal: true)),
             const SizedBox(height: 16),
             _label('Category'),
-            _categoryDropdown(),
+            CategoryPickerField(
+              value: _category,
+              accentColor: AppTheme.orange,
+              onChanged: (v) => setState(() => _category = v),
+            ),
             const SizedBox(height: 16),
             _label('Image (optional)'),
             ImageUploadField(
@@ -146,8 +143,8 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
 
   Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
-        child:
-            Text(text, style: AppTheme.inter(size: 12, color: Colors.grey)),
+        child: Text(text,
+            style: AppTheme.inter(size: 12, color: Colors.grey)),
       );
 
   Widget _textField(TextEditingController ctrl,
@@ -171,31 +168,6 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
                   color: AppTheme.orange, width: 1.5)),
-        ),
-      );
-
-  Widget _categoryDropdown() => Container(
-        decoration: BoxDecoration(
-          color: AppTheme.card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.border),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: DropdownButton<String>(
-          value: _category,
-          isExpanded: true,
-          dropdownColor: AppTheme.card,
-          underline: const SizedBox(),
-          hint: Text('Select category',
-              style: AppTheme.inter(size: 13, color: Colors.grey)),
-          style: AppTheme.inter(size: 13, color: Colors.white),
-          items: _categories
-              .map((c) => DropdownMenuItem(
-                  value: c.key,
-                  child: Text(c.name,
-                      style: AppTheme.inter(size: 13, color: Colors.white))))
-              .toList(),
-          onChanged: (v) => setState(() => _category = v),
         ),
       );
 

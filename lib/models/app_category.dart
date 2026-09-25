@@ -1,64 +1,65 @@
-import 'package:flutter/material.dart';
-
 class AppCategory {
   final String id;
   final String key;
   final String name;
-  final String iconName;
+  final String? imageUrl;
+  final String status; // 'active' | 'inactive'
   final int order;
+  final String description; // optional short tagline/summary
+  final bool isFeaturedInCarousel;
 
   const AppCategory({
     required this.id,
     required this.key,
     required this.name,
-    required this.iconName,
+    this.imageUrl,
+    this.status = 'active',
     this.order = 0,
+    this.description = '',
+    this.isFeaturedInCarousel = false,
   });
 
-  IconData get icon => iconMap[iconName] ?? Icons.category_outlined;
-
-  static const Map<String, IconData> iconMap = {
-    'tv': Icons.tv,
-    'sports_esports': Icons.sports_esports,
-    'rocket_launch': Icons.rocket_launch,
-    'movie': Icons.movie,
-    'music_note': Icons.music_note,
-    'book': Icons.book_outlined,
-    'sports': Icons.sports,
-    'videogame_asset': Icons.videogame_asset,
-    'auto_awesome': Icons.auto_awesome,
-    'favorite': Icons.favorite_border,
-    'star': Icons.star_border,
-    'category': Icons.category_outlined,
-  };
+  bool get isActive => status == 'active';
 
   factory AppCategory.fromMap(Map<String, dynamic> map, String docId) =>
       AppCategory(
         id: docId,
         key: map['key'] ?? docId,
         name: map['name'] ?? '',
-        iconName: map['iconName'] ?? 'category',
+        imageUrl: map['imageUrl'] as String?,
+        status: (map['status'] as String?) ?? 'active',
         order: (map['order'] as num?)?.toInt() ?? 0,
+        description: map['description'] ?? '',
+        isFeaturedInCarousel: map['isFeaturedInCarousel'] as bool? ?? false,
       );
 
   Map<String, dynamic> toMap() => {
         'key': key,
         'name': name,
-        'iconName': iconName,
+        'status': status,
         'order': order,
+        if (imageUrl != null) 'imageUrl': imageUrl,
+        'description': description,
+        'isFeaturedInCarousel': isFeaturedInCarousel,
       };
 
   AppCategory copyWith({
     String? key,
     String? name,
-    String? iconName,
+    String? imageUrl,
+    String? status,
     int? order,
+    String? description,
+    bool? isFeaturedInCarousel,
   }) =>
       AppCategory(
         id: id,
         key: key ?? this.key,
         name: name ?? this.name,
-        iconName: iconName ?? this.iconName,
+        imageUrl: imageUrl ?? this.imageUrl,
+        status: status ?? this.status,
         order: order ?? this.order,
+        description: description ?? this.description,
+        isFeaturedInCarousel: isFeaturedInCarousel ?? this.isFeaturedInCarousel,
       );
 }

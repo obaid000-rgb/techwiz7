@@ -40,6 +40,13 @@ dependencies:
   google_fonts: ^6.2.1
   image_picker: ^1.1.2
   http: ^1.2.2
+  youtube_player_flutter: ^10.0.1
+  url_launcher: ^6.3.2
+  geolocator: ^14.0.3
+  flutter_map: ^8.3.2
+  latlong2: ^0.9.1
+  hive_ce: ^2.20.0
+  hive_ce_flutter: ^2.3.4
 
 dev_dependencies:
   flutter_test:
