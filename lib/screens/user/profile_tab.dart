@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/guest_prompt.dart';
+import '../../widgets/image_upload_field.dart';
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
@@ -20,49 +22,48 @@ class ProfileTab extends StatelessWidget {
   }
 }
 
-class _ProfileContent extends StatelessWidget {
+class _ProfileContent extends StatefulWidget {
   final UserData user;
   const _ProfileContent({required this.user});
 
   @override
+  State<_ProfileContent> createState() => _ProfileContentState();
+}
+
+class _ProfileContentState extends State<_ProfileContent> {
+  Future<void> _onAvatarUploaded(String url) async {
+    final u = widget.user;
+    final updated = UserData(
+      uid: u.uid,
+      name: u.name,
+      email: u.email,
+      avatarUrl: url,
+      savedEvents: u.savedEvents,
+      bookmarks: u.bookmarks,
+      rank: u.rank,
+      role: u.role,
+      categories: u.categories,
+    );
+    try {
+      await UserService.instance.updateUser(updated);
+    } catch (_) {}
+    AuthService.instance.userNotifier.value = updated;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final user = widget.user;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
           const SizedBox(height: 20),
-          Center(
-            child: Stack(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(colors: [AppTheme.accent, AppTheme.cyan]),
-                  ),
-                  child: CircleAvatar(
-                    radius: 46,
-                    backgroundImage: user.avatarUrl.isNotEmpty
-                        ? NetworkImage(user.avatarUrl)
-                        : null,
-                    backgroundColor: AppTheme.card,
-                    child: user.avatarUrl.isEmpty
-                        ? Text(user.name[0].toUpperCase(),
-                            style: AppTheme.orbitron(size: 32, weight: FontWeight.w900))
-                        : null,
-                  ),
-                ),
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: const BoxDecoration(color: AppTheme.cyan, shape: BoxShape.circle),
-                    child: const Icon(Icons.verified, size: 16, color: Colors.black),
-                  ),
-                ),
-              ],
-            ),
+          ImageUploadField(
+            initialUrl: user.avatarUrl.isEmpty ? null : user.avatarUrl,
+            onUploaded: _onAvatarUploaded,
+            accentColor: AppTheme.cyan,
+            isCircular: true,
+            circleRadius: 46,
           ),
           const SizedBox(height: 14),
           Text(user.name,

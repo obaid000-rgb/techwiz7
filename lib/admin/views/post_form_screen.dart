@@ -4,6 +4,7 @@ import '../../models/post.dart';
 import '../../services/category_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/image_upload_field.dart';
 
 class PostFormScreen extends StatefulWidget {
   final Post? existing;
@@ -16,8 +17,8 @@ class PostFormScreen extends StatefulWidget {
 class _PostFormScreenState extends State<PostFormScreen> {
   final _titleCtr = TextEditingController();
   final _contentCtr = TextEditingController();
-  final _imageCtr = TextEditingController();
   String? _category;
+  String _imageUrl = '';
   bool _saving = false;
   String? _error;
   List<AppCategory> _categories = [];
@@ -29,7 +30,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
     if (e != null) {
       _titleCtr.text = e.title;
       _contentCtr.text = e.content;
-      _imageCtr.text = e.imageUrl;
+      _imageUrl = e.imageUrl;
       _category = e.category.isEmpty ? null : e.category;
     }
     _loadCategories();
@@ -44,7 +45,6 @@ class _PostFormScreenState extends State<PostFormScreen> {
   void dispose() {
     _titleCtr.dispose();
     _contentCtr.dispose();
-    _imageCtr.dispose();
     super.dispose();
   }
 
@@ -95,10 +95,12 @@ class _PostFormScreenState extends State<PostFormScreen> {
             _textField(_contentCtr,
                 hint: 'Write the lore content...', maxLines: 6),
             const SizedBox(height: 16),
-            _label('Image URL (optional)'),
-            _textField(_imageCtr,
-                hint: 'https://example.com/image.jpg',
-                keyboardType: TextInputType.url),
+            _label('Image (optional)'),
+            ImageUploadField(
+              initialUrl: _imageUrl.isEmpty ? null : _imageUrl,
+              onUploaded: (url) => setState(() => _imageUrl = url),
+              accentColor: AppTheme.cyan,
+            ),
             const SizedBox(height: 28),
             SizedBox(
               width: double.infinity,
@@ -202,7 +204,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
         title: title,
         category: _category ?? '',
         content: content,
-        imageUrl: _imageCtr.text.trim(),
+        imageUrl: _imageUrl,
         createdAt: widget.existing?.createdAt ?? DateTime.now(),
       );
       if (widget.existing == null) {

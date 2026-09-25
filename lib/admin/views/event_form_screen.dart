@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/event_item.dart';
 import '../../services/event_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/image_upload_field.dart';
 
 class EventFormScreen extends StatefulWidget {
   final EventItem? existing;
@@ -18,6 +19,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
   final _linkCtr = TextEditingController();
   final _priceCtr = TextEditingController();
   DateTime _date = DateTime.now();
+  String _imageUrl = '';
   bool _saving = false;
   String? _error;
 
@@ -32,6 +34,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
       _linkCtr.text = e.ticketLink;
       _priceCtr.text = e.ticketPrice;
       _date = e.date;
+      _imageUrl = e.imageUrl;
     }
   }
 
@@ -103,6 +106,13 @@ class _EventFormScreenState extends State<EventFormScreen> {
             const SizedBox(height: 16),
             _label('Ticket Price (optional)'),
             _textField(_priceCtr, hint: '\$25.00 or Free'),
+            const SizedBox(height: 16),
+            _label('Event Image (optional)'),
+            ImageUploadField(
+              initialUrl: _imageUrl.isEmpty ? null : _imageUrl,
+              onUploaded: (url) => setState(() => _imageUrl = url),
+              accentColor: AppTheme.pink,
+            ),
             const SizedBox(height: 28),
             SizedBox(
               width: double.infinity,
@@ -226,6 +236,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
         venue: venue,
         ticketLink: _linkCtr.text.trim(),
         ticketPrice: _priceCtr.text.trim(),
+        imageUrl: _imageUrl,
       );
       if (widget.existing == null) {
         await EventService.instance.addEvent(event);

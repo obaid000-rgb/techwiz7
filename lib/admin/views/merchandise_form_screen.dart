@@ -4,6 +4,7 @@ import '../../models/merchandise.dart';
 import '../../services/category_service.dart';
 import '../../services/merchandise_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/image_upload_field.dart';
 
 class MerchandiseFormScreen extends StatefulWidget {
   final Merchandise? existing;
@@ -16,9 +17,9 @@ class MerchandiseFormScreen extends StatefulWidget {
 class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
   final _nameCtr = TextEditingController();
   final _priceCtr = TextEditingController();
-  final _imageCtr = TextEditingController();
   final _descCtr = TextEditingController();
   String? _category;
+  String _imageUrl = '';
   bool _saving = false;
   String? _error;
   List<AppCategory> _categories = [];
@@ -30,7 +31,7 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
     if (e != null) {
       _nameCtr.text = e.name;
       _priceCtr.text = e.price.toStringAsFixed(2);
-      _imageCtr.text = e.imageUrl;
+      _imageUrl = e.imageUrl;
       _descCtr.text = e.description;
       _category = e.category.isEmpty ? null : e.category;
     }
@@ -46,7 +47,6 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
   void dispose() {
     _nameCtr.dispose();
     _priceCtr.dispose();
-    _imageCtr.dispose();
     _descCtr.dispose();
     super.dispose();
   }
@@ -103,10 +103,12 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
             _label('Category'),
             _categoryDropdown(),
             const SizedBox(height: 16),
-            _label('Image URL (optional)'),
-            _textField(_imageCtr,
-                hint: 'https://example.com/product.jpg',
-                keyboardType: TextInputType.url),
+            _label('Image (optional)'),
+            ImageUploadField(
+              initialUrl: _imageUrl.isEmpty ? null : _imageUrl,
+              onUploaded: (url) => setState(() => _imageUrl = url),
+              accentColor: AppTheme.orange,
+            ),
             const SizedBox(height: 16),
             _label('Description'),
             _textField(_descCtr,
@@ -219,7 +221,7 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
         name: name,
         price: price,
         category: _category ?? '',
-        imageUrl: _imageCtr.text.trim(),
+        imageUrl: _imageUrl,
         description: _descCtr.text.trim(),
       );
       if (widget.existing == null) {

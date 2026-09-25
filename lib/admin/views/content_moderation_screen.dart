@@ -16,7 +16,7 @@ class ContentModerationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: Column(
         children: [
           Material(
@@ -31,7 +31,6 @@ class ContentModerationScreen extends StatelessWidget {
               tabs: const [
                 Tab(text: 'LORE'),
                 Tab(text: 'MERCH'),
-                Tab(text: 'EVENTS'),
               ],
             ),
           ),
@@ -40,7 +39,6 @@ class ContentModerationScreen extends StatelessWidget {
               children: [
                 _PostsTab(),
                 _MerchandiseTab(),
-                _EventsTab(),
               ],
             ),
           ),
@@ -193,10 +191,10 @@ class _MerchandiseTab extends StatelessWidget {
   }
 }
 
-// ── Events tab ────────────────────────────────────────────────────────────────
+// ── Events section (standalone sidebar entry) ─────────────────────────────────
 
-class _EventsTab extends StatelessWidget {
-  const _EventsTab();
+class EventsSection extends StatelessWidget {
+  const EventsSection({super.key});
 
   @override
   Widget build(BuildContext context) {

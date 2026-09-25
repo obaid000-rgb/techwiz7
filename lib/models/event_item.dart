@@ -8,6 +8,7 @@ class EventItem {
   final String venue;
   final String ticketLink;
   final String ticketPrice;
+  final String imageUrl;
 
   const EventItem({
     required this.id,
@@ -17,6 +18,7 @@ class EventItem {
     required this.venue,
     this.ticketLink = '',
     this.ticketPrice = '',
+    this.imageUrl = '',
   });
 
   factory EventItem.fromMap(Map<String, dynamic> map, String docId) =>
@@ -28,6 +30,7 @@ class EventItem {
         venue: map['venue'] ?? '',
         ticketLink: map['ticketLink'] ?? '',
         ticketPrice: map['ticketPrice'] ?? '',
+        imageUrl: map['imageUrl'] ?? '',
       );
 
   Map<String, dynamic> toMap() => {
@@ -37,6 +40,7 @@ class EventItem {
         'venue': venue,
         'ticketLink': ticketLink,
         'ticketPrice': ticketPrice,
+        'imageUrl': imageUrl,
       };
 
   EventItem copyWith({
@@ -46,6 +50,7 @@ class EventItem {
     String? venue,
     String? ticketLink,
     String? ticketPrice,
+    String? imageUrl,
   }) =>
       EventItem(
         id: id,
@@ -55,5 +60,6 @@ class EventItem {
         venue: venue ?? this.venue,
         ticketLink: ticketLink ?? this.ticketLink,
         ticketPrice: ticketPrice ?? this.ticketPrice,
+        imageUrl: imageUrl ?? this.imageUrl,
       );
 }

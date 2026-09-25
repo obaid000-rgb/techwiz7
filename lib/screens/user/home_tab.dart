@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/app_category.dart';
-import '../../models/fandom.dart';
+import '../../models/post.dart';
 import '../../services/category_service.dart';
+import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/trending_carousel.dart';
@@ -19,63 +20,10 @@ class HomeTab extends StatefulWidget {
 class _HomeTabState extends State<HomeTab> {
   String _selectedCategory = 'all';
   String _activeDepth = 'all';
-  final Set<int> _bookmarkedIds = {};
-  late Future<List<AppCategory>> _categoriesFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _categoriesFuture = CategoryService.instance.fetchCategories();
-  }
-
-  final List<Fandom> loreList = [
-    Fandom(
-      id: 1,
-      title: "Cyberpunk 2088: The Arasaka Vault Heist",
-      category: "gaming",
-      depth: "deep",
-      badge: "EPISODE LORE",
-      img: "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=500&q=80",
-      summary: "Complete breakdown of the legendary netrunner infiltration into orbital vault.",
-      fullBody:
-          "The Arasaka Vault Heist remains the most pivotal event in 2088 netrunning history. Executed by a rogue squad of Mercs, the operation breached three layers of security to retrieve the mythical Soulkiller 2.0 source code. This archive details step-by-step IC breaching and ICE protection protocols.",
-    ),
-    Fandom(
-      id: 2,
-      title: "Demon Slayer: Breath of Cyber-Flame",
-      category: "anime",
-      depth: "beginner",
-      badge: "BEGINNER GUIDE",
-      img: "https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=500&q=80",
-      summary: "An introductory timeline explaining swordsmanship breathing styles.",
-      fullBody:
-          "Breathing Styles are specialized swordsmanship forms practiced and taught by the Demon Slayer Corps. Cyber-Flame combines traditional energy-amplified katana strikes with high-frequency thermal vibrations, allowing slayers to slice through heavy armor.",
-    ),
-    Fandom(
-      id: 3,
-      title: "Interstellar Odyssey: Dark Matter Gates",
-      category: "scifi",
-      depth: "intermediate",
-      badge: "SCI-FI ARCHIVE",
-      img: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=500&q=80",
-      summary: "How warp propulsion gates function across outer rim solar systems.",
-      fullBody:
-          "Dark Matter Gates utilize quantum entanglement to collapse local spacetime vectors. First engineered by the Orion Syndicate, these structures allow instantaneous transit across sub-light distances.",
-    ),
-  ];
+  final Set<String> _bookmarkedIds = {};
 
   @override
   Widget build(BuildContext context) {
-    final q = widget.searchQuery.toLowerCase();
-    final filteredList = loreList.where((item) {
-      final matchesCategory = _selectedCategory == 'all' || item.category == _selectedCategory;
-      final matchesSearch = q.isEmpty ||
-          item.title.toLowerCase().contains(q) ||
-          item.summary.toLowerCase().contains(q);
-      final matchesDepth = _activeDepth == 'all' || item.depth == _activeDepth;
-      return matchesCategory && matchesSearch && matchesDepth;
-    }).toList();
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -92,9 +40,9 @@ class _HomeTabState extends State<HomeTab> {
           const TrendingCarousel(),
           const SizedBox(height: 20),
 
-          // ── Category chips (loaded from Firestore categories collection) ──
-          FutureBuilder<List<AppCategory>>(
-            future: _categoriesFuture,
+          // ── Category chips (live from Firestore) ──────────────────
+          StreamBuilder<List<AppCategory>>(
+            stream: CategoryService.instance.watchCategories(),
             builder: (context, snapshot) {
               final cats = snapshot.data ?? [];
               return SingleChildScrollView(
@@ -141,27 +89,107 @@ class _HomeTabState extends State<HomeTab> {
           ),
           const SizedBox(height: 12),
 
-          // ── Lore cards ────────────────────────────────────────────
-          filteredList.isEmpty
-              ? Padding(
+          // ── Lore cards (live from Firestore) ─────────────────────
+          StreamBuilder<List<Post>>(
+            stream: PostService.instance.watchPosts(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan),
+                  ),
+                );
+              }
+              if (snapshot.hasError) {
+                return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 32),
                   child: Center(
-                    child: Text('No lore archives found.',
-                        style: AppTheme.inter(size: 12, color: Colors.grey)),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.wifi_off, color: Colors.grey, size: 28),
+                        const SizedBox(height: 8),
+                        Text('Could not load lore archives',
+                            style: AppTheme.inter(size: 12, color: Colors.grey)),
+                      ],
+                    ),
                   ),
-                )
-              : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: filteredList.length,
-                  itemBuilder: (context, idx) => _loreCard(context, filteredList[idx]),
-                ),
+                );
+              }
+
+              final allPosts = snapshot.data ?? [];
+              final q = widget.searchQuery.toLowerCase();
+              final filtered = allPosts.where((p) {
+                final matchesCategory =
+                    _selectedCategory == 'all' || p.category == _selectedCategory;
+                final matchesSearch = q.isEmpty ||
+                    p.title.toLowerCase().contains(q) ||
+                    p.content.toLowerCase().contains(q);
+                return matchesCategory && matchesSearch;
+              }).toList();
+
+              if (allPosts.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.menu_book_outlined, color: Colors.grey, size: 36),
+                        const SizedBox(height: 10),
+                        Text('No lore archives yet',
+                            style: AppTheme.orbitron(
+                                size: 12, color: Colors.grey, weight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        Text('Check back soon when new content is published.',
+                            style: AppTheme.inter(size: 11, color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              if (filtered.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.search_off, color: Colors.grey, size: 36),
+                        const SizedBox(height: 10),
+                        Text('No results for this filter',
+                            style: AppTheme.orbitron(
+                                size: 12, color: Colors.grey, weight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _selectedCategory = 'all';
+                            _activeDepth = 'all';
+                          }),
+                          child: Text('Clear filters',
+                              style: AppTheme.inter(size: 11, color: AppTheme.cyan)),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: filtered.length,
+                itemBuilder: (context, idx) => _loreCard(context, filtered[idx]),
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
-  // ── Category chip ──────────────────────────────────────────────────
   Widget _chip(String label, String value, IconData? icon) {
     final isSelected = _selectedCategory == value;
     return GestureDetector(
@@ -199,7 +227,6 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  // ── Depth segmented control segment ───────────────────────────────
   Widget _depthSegment(String label, String value) {
     final isActive = _activeDepth == value;
     return GestureDetector(
@@ -222,35 +249,9 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  // ── Depth overlay pill ─────────────────────────────────────────────
-  Widget _depthPill(String depth) {
-    final Color bg;
-    final Color fg;
-    final String label;
-    switch (depth) {
-      case 'beginner':
-        bg = const Color(0xFF166534);
-        fg = const Color(0xFF4ADE80);
-        label = 'BEGINNER';
-      case 'deep':
-        bg = AppTheme.accent.withValues(alpha: 0.25);
-        fg = AppTheme.accent;
-        label = 'DEEP DIVE';
-      default:
-        bg = AppTheme.orange.withValues(alpha: 0.2);
-        fg = AppTheme.orange;
-        label = depth.toUpperCase();
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
-      child: Text(label, style: GoogleFonts.orbitron(color: fg, fontSize: 8, fontWeight: FontWeight.w700)),
-    );
-  }
-
-  // ── Full lore card ─────────────────────────────────────────────────
-  Widget _loreCard(BuildContext context, Fandom item) {
-    final isBookmarked = _bookmarkedIds.contains(item.id);
+  Widget _loreCard(BuildContext context, Post post) {
+    final isBookmarked = _bookmarkedIds.contains(post.id);
+    final badge = post.category.isEmpty ? 'LORE ARCHIVE' : post.category.toUpperCase();
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -261,53 +262,63 @@ class _HomeTabState extends State<HomeTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Image with overlaid pills and bookmark button
           Stack(
             children: [
               ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-                child: Image.network(
-                  item.img,
-                  height: 144,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
+                child: post.imageUrl.isNotEmpty
+                    ? Image.network(
+                        post.imageUrl,
+                        height: 144,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (ctx, e, st) => Container(
+                          height: 144,
+                          color: AppTheme.bg,
+                          alignment: Alignment.center,
+                          child: const Icon(
+                              Icons.article_outlined, color: Colors.white12, size: 36),
+                        ),
+                      )
+                    : Container(
+                        height: 144,
+                        color: AppTheme.bg,
+                        alignment: Alignment.center,
+                        child: const Icon(
+                            Icons.article_outlined, color: Colors.white12, size: 36),
+                      ),
               ),
-              // Top-left: badge pill + depth pill
               Positioned(
                 top: 8,
                 left: 8,
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.65),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        item.badge,
-                        style: GoogleFonts.orbitron(
-                            color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    _depthPill(item.depth),
-                  ],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    badge,
+                    style: GoogleFonts.orbitron(
+                        color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
-              // Top-right: bookmark toggle
               Positioned(
                 top: 4,
                 right: 4,
                 child: GestureDetector(
                   onTap: () => setState(() {
-                    isBookmarked ? _bookmarkedIds.remove(item.id) : _bookmarkedIds.add(item.id);
+                    isBookmarked
+                        ? _bookmarkedIds.remove(post.id)
+                        : _bookmarkedIds.add(post.id);
                   }),
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: isBookmarked ? AppTheme.cyan : Colors.black.withValues(alpha: 0.55),
+                      color: isBookmarked
+                          ? AppTheme.cyan
+                          : Colors.black.withValues(alpha: 0.55),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -320,21 +331,20 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ],
           ),
-          // Text area
           Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.title,
+                  post.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTheme.orbitron(size: 13, weight: FontWeight.w700),
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  item.summary,
+                  post.content,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppTheme.inter(size: 12, color: Colors.grey, height: 1.4),
@@ -348,7 +358,7 @@ class _HomeTabState extends State<HomeTab> {
                         const Icon(Icons.local_offer_outlined, color: Colors.grey, size: 12),
                         const SizedBox(width: 4),
                         Text(
-                          item.category.toUpperCase(),
+                          post.category.toUpperCase(),
                           style: AppTheme.inter(size: 10, color: Colors.grey),
                         ),
                       ],
@@ -356,13 +366,16 @@ class _HomeTabState extends State<HomeTab> {
                     GestureDetector(
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => FandomDetailScreen(fandom: item)),
+                        MaterialPageRoute(
+                            builder: (_) => FandomDetailScreen(post: post)),
                       ),
                       child: Row(
                         children: [
                           Text('Read Archive',
                               style: AppTheme.inter(
-                                  size: 12, color: AppTheme.cyan, weight: FontWeight.w600)),
+                                  size: 12,
+                                  color: AppTheme.cyan,
+                                  weight: FontWeight.w600)),
                           const SizedBox(width: 3),
                           const Icon(Icons.arrow_forward, size: 13, color: AppTheme.cyan),
                         ],
