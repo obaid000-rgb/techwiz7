@@ -60,6 +60,10 @@ class AiAssistantService {
 
   /// Sends [text] and returns the reply. Throws [AiAssistantException].
   Future<String> ask(String text) async {
+    if (GeminiConfig.apiKey.isEmpty) {
+      if (kDebugMode) debugPrint('[AiAssistant] no key: run with --dart-define-from-file=secrets.json');
+      throw const AiAssistantException(AiAssistantFailure.badKey);
+    }
     _chat ??= _model.startChat();
     transcript.add((fromUser: true, text: text));
     try {
