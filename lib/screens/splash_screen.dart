@@ -2,8 +2,9 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:hive_ce_flutter/hive_flutter.dart';
 import '../services/auth_service.dart';
+import '../services/first_run_service.dart';
+import '../services/onboarding_slide_service.dart';
 import '../theme/app_theme.dart';
 import 'onboarding_carousel_screen.dart';
 import 'user/fan_home_screen.dart';
@@ -25,9 +26,10 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _start() async {
+    final navigator = Navigator.of(context);
     Widget next;
     try {
-      next = await _decideNextScreen().timeout(_maxWait);
+      next = await _decideNextScreen(navigator).timeout(_maxWait);
     } catch (_) {
       // Timed out or failed: fall through to the guest landing. FanHomeScreen
       // listens to AuthService itself, so it still updates if the profile
@@ -35,21 +37,28 @@ class _SplashScreenState extends State<SplashScreen> {
       next = const FanHomeScreen();
     }
     if (!mounted) return;
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => next));
+    navigator.pushReplacement(MaterialPageRoute(builder: (_) => next));
   }
 
   /// Routing decision:
-  /// 1. Intro carousel not yet seen on this install → carousel (regardless of
-  ///    auth state; its end routes to FanHomeScreen).
+  /// 1. First-run sequence (slides + interest selection) not completed on
+  ///    this install → admin slides if any exist, else straight to interest
+  ///    selection (also if slides can't be loaded). Applies regardless of
+  ///    auth state; the sequence ends on FanHomeScreen.
   /// 2. Otherwise → FanHomeScreen, which is both the guest landing and the
   ///    signed-in Home shell (it shows Select Fandoms itself if needed).
   ///    For a signed-in user we wait for AuthService to load their Firestore
   ///    profile first, so Home opens already signed in instead of flashing
   ///    the guest top bar for a moment.
-  Future<Widget> _decideNextScreen() async {
-    final prefs = await Hive.openBox(kAppPrefsBox);
-    if (prefs.get(kHasSeenOnboardingKey) != true) {
-      return const OnboardingCarouselScreen();
+  Future<Widget> _decideNextScreen(NavigatorState navigator) async {
+    if (!await FirstRunService.instance.hasSeenOnboarding()) {
+      try {
+        final slides = await OnboardingSlideService.instance
+            .fetchSlides()
+            .timeout(const Duration(seconds: 5));
+        if (slides.isNotEmpty) return const OnboardingCarouselScreen();
+      } catch (_) {}
+      return preLoginInterestSelection(navigator);
     }
 
     // Touching AuthService.instance starts its authStateChanges listener.

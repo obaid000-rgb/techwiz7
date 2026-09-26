@@ -5,6 +5,7 @@ import 'admin_dashboard.dart';
 import 'category_management_screen.dart';
 import 'content_moderation_screen.dart';
 import 'glossary_management_screen.dart';
+import 'onboarding_slide_management_screen.dart';
 import 'user_management_screen.dart';
 
 // ── Nav-item config ────────────────────────────────────────────────────────────
@@ -71,6 +72,12 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Glossary',
       color: AppTheme.cyan,
       child: const GlossaryManagementScreen(),
+    ),
+    _NavItem(
+      icon: Icons.slideshow_outlined,
+      label: 'Onboarding',
+      color: AppTheme.pink,
+      child: const OnboardingSlideManagementScreen(),
     ),
   ];
 

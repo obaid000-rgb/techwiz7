@@ -72,6 +72,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Read by the pre-login intro carousel, so it must be public.
+    match /onboarding_slides/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ── Catch-all ─────────────────────────────────────────────────────────────
 
     match /{document=**} {

@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import '../../services/first_run_service.dart';
+import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/validators.dart';
 
@@ -36,11 +38,34 @@ class _SignupScreenState extends State<SignupScreen> {
         password: _passController.text,
         name: _nameController.text,
       );
+      await _applyPendingSelection();
       if (mounted) Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
       setState(() { _errorMessage = _friendlyError(e.code); });
     } finally {
       if (mounted) setState(() { _loading = false; });
+    }
+  }
+
+  // Registration-only: a brand-new account adopts the interests + badge picked
+  // before login on this device (LoginScreen deliberately never reads them —
+  // an existing account's saved data always wins). The pending selection is
+  // cleared once written so it can't attach to a later account. If there is
+  // none, or the write fails, the account keeps empty categories and
+  // FanHomeScreen's Select Fandoms fallback asks instead.
+  Future<void> _applyPendingSelection() async {
+    final user = AuthService.instance.currentUser;
+    if (user == null) return;
+    final pending = await FirstRunService.instance.readPending();
+    if (pending == null) return;
+    AuthService.instance.userNotifier.value =
+        user.copyWith(categories: pending.categories, badge: pending.badge);
+    try {
+      await UserService.instance
+          .setInterestsAndBadge(user.uid, pending.categories, pending.badge);
+      await FirstRunService.instance.clearPending();
+    } catch (_) {
+      AuthService.instance.userNotifier.value = user;
     }
   }
 

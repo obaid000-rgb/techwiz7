@@ -508,6 +508,9 @@ class _FanHomeScreenState extends State<FanHomeScreen> {
     return ValueListenableBuilder<UserData?>(
       valueListenable: AuthService.instance.userNotifier,
       builder: (context, user, _) {
+        // Safety net: any signed-in account with no saved categories (e.g.
+        // pre-migration accounts, or registered with no pending pre-login
+        // selection on this device) picks interests + badge here.
         if (user != null && !user.hasOnboarded) {
           return OnboardingScreen(user: user);
         }

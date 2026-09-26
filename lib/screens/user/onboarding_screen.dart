@@ -5,13 +5,21 @@ import '../../services/category_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 
-/// Shown once, right after signup, to any signed-in user who hasn't saved
-/// categories yet (see UserData.hasOnboarded). Collects interests
-/// (categories) and a profile badge, then writes both to the same
-/// Firestore user document.
+/// Collects interests (categories) and a profile badge. Two modes:
+/// - [OnboardingScreen]: signed-in user with no saved categories (see
+///   UserData.hasOnboarded) — writes both to their Firestore user document.
+/// - [OnboardingScreen.preLogin]: first-run flow before any account exists —
+///   hands the selection to [onPreLoginComplete] instead of writing anywhere.
 class OnboardingScreen extends StatefulWidget {
-  final UserData user;
-  const OnboardingScreen({super.key, required this.user});
+  final UserData? user;
+  final Future<void> Function(List<String> categories, String badge)?
+      onPreLoginComplete;
+
+  const OnboardingScreen({super.key, required UserData this.user})
+      : onPreLoginComplete = null;
+
+  const OnboardingScreen.preLogin({super.key, required this.onPreLoginComplete})
+      : user = null;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -36,11 +44,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _saving = true;
       _error = null;
     });
-    final updated = widget.user.copyWith(
-      categories: _selectedCategoryKeys.toList(),
-      badge: _selectedBadge,
-    );
     try {
+      final user = widget.user;
+      if (user == null) {
+        await widget.onPreLoginComplete!(
+            _selectedCategoryKeys.toList(), _selectedBadge!);
+        return;
+      }
+      final updated = user.copyWith(
+        categories: _selectedCategoryKeys.toList(),
+        badge: _selectedBadge,
+      );
       await UserService.instance.updateUser(updated);
       AuthService.instance.userNotifier.value = updated;
     } catch (e) {

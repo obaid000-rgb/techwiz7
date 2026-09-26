@@ -27,6 +27,13 @@ class UserService {
             : FieldValue.arrayRemove([productId]),
       });
 
+  Future<void> setInterestsAndBadge(
+          String uid, List<String> categories, String badge) =>
+      FirestoreDb.instance.collection('users').doc(uid).update({
+        'categories': categories,
+        'badge': badge,
+      });
+
   Future<void> deleteUser(String uid) =>
       FirestoreDb.instance.collection('users').doc(uid).delete();
 }
