@@ -23,6 +23,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
   String _contentType = 'News';
   String _status = 'active';
   String _contentDepth = '';
+  String _deepDiveType = '';
   bool _isFandomOfTheDay = false;
   bool _saving = false;
   String? _error;
@@ -41,6 +42,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
       _contentType = e.contentType;
       _status = e.status;
       _contentDepth = e.contentDepth;
+      _deepDiveType = e.deepDiveType;
       _isFandomOfTheDay = e.isFandomOfTheDay;
       _youtubeUrlCtr.text = e.youtubeUrl ?? '';
       _youtubeVideoId = extractYoutubeVideoId(_youtubeUrlCtr.text);
@@ -202,6 +204,19 @@ class _PostFormScreenState extends State<PostFormScreen> {
               ],
               (val) => setState(() => _contentDepth = val ?? _contentDepth),
             ),
+            if (_contentDepth == 'deep') ...[
+              const SizedBox(height: 16),
+              _label('Deep Dive type (Trivia / Advanced Lore / Interviews tab)'),
+              _dropdown(
+                _deepDiveType,
+                [
+                  const DropdownMenuItem(value: '', child: Text('Unset (All tab only)')),
+                  for (final t in kDeepDiveTypes)
+                    DropdownMenuItem(value: t, child: Text(kDeepDiveTypeLabels[t]!)),
+                ],
+                (val) => setState(() => _deepDiveType = val ?? _deepDiveType),
+              ),
+            ],
             const SizedBox(height: 16),
             _todaysFandomToggle(),
             const SizedBox(height: 28),
@@ -346,6 +361,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
         contentType: _contentType,
         status: _status,
         contentDepth: _contentDepth,
+        deepDiveType: _contentDepth == 'deep' ? _deepDiveType : '',
         youtubeUrl: youtubeText.isEmpty ? null : youtubeText,
         // Saved as false here regardless of the toggle; setFandomOfTheDay
         // below is what actually flips it on, so the "unset every other

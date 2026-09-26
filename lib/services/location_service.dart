@@ -9,11 +9,13 @@ class LocationService {
   /// Returns the Fan's current position, or null if location services are
   /// off or permission isn't already granted — callers fall back to the
   /// existing city-matching behavior rather than prompting a custom flow.
-  Future<Position?> getCurrentPosition() async {
+  /// With [requestIfNeeded] false this never shows the OS permission prompt;
+  /// it only returns a position if permission was already granted.
+  Future<Position?> getCurrentPosition({bool requestIfNeeded = true}) async {
     if (!await Geolocator.isLocationServiceEnabled()) return null;
 
     var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
+    if (permission == LocationPermission.denied && requestIfNeeded) {
       permission = await Geolocator.requestPermission();
     }
     if (permission == LocationPermission.denied ||

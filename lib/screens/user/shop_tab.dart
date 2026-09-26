@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../models/merchandise.dart';
 import '../../services/auth_service.dart';
+import '../../services/cart_service.dart';
 import '../../services/merchandise_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/guest_prompt.dart';
 import '../../widgets/section_header.dart';
+import 'cart_screen.dart';
+import 'product_detail_screen.dart';
 import 'wishlist_screen.dart';
 
 /// Merchandise grid, moved here from the old ExploreTab (which was
@@ -20,16 +23,18 @@ class ShopTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          SectionHeader(
+            icon: Icons.shopping_bag,
+            iconColor: AppTheme.orange,
+            title: 'OFFICIAL MERCHANDISE',
+          ),
+          const SizedBox(height: 10),
           Row(
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Expanded(
-                child: SectionHeader(
-                  icon: Icons.shopping_bag,
-                  iconColor: AppTheme.orange,
-                  title: 'OFFICIAL MERCHANDISE',
-                ),
-              ),
               _wishlistButton(context),
+              const SizedBox(width: 8),
+              const CartButton(),
             ],
           ),
           const SizedBox(height: 12),
@@ -143,14 +148,7 @@ const SliverGridDelegateWithFixedCrossAxisCount kMerchGridDelegate =
 Future<void> toggleWishlist(BuildContext context, Merchandise item) async {
   final user = AuthService.instance.currentUser;
   if (user == null) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => const _WishlistLoginSheet(),
-    );
+    showGuestLoginSheet(context, feature: 'Your wishlist');
     return;
   }
   final wasWishlisted = user.wishlistedProductIds.contains(item.id);
@@ -176,16 +174,62 @@ Future<void> toggleWishlist(BuildContext context, Merchandise item) async {
   }
 }
 
-/// Hosts the existing [GuestPrompt] in a sheet, and closes itself once the
-/// guest signs in or registers from it (so they land back on the Shop).
-class _WishlistLoginSheet extends StatefulWidget {
-  const _WishlistLoginSheet();
-
-  @override
-  State<_WishlistLoginSheet> createState() => _WishlistLoginSheetState();
+/// Shows the standard [GuestPrompt] in a bottom sheet for a guest who tried a
+/// signed-in-only Shop action (wishlist, cart).
+void showGuestLoginSheet(BuildContext context, {required String feature}) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: AppTheme.card,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (_) => _GuestLoginSheet(feature: feature),
+  );
 }
 
-class _WishlistLoginSheetState extends State<_WishlistLoginSheet> {
+/// Adds [item] to the signed-in user's cart (guests get [GuestPrompt]).
+Future<void> addToCart(BuildContext context, Merchandise item,
+    {int quantity = 1}) async {
+  final user = AuthService.instance.currentUser;
+  if (user == null) {
+    showGuestLoginSheet(context, feature: 'Your cart');
+    return;
+  }
+  final messenger = ScaffoldMessenger.of(context);
+  final navigator = Navigator.of(context);
+  try {
+    await CartService.instance.addToCart(user.uid, item, quantity: quantity);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(
+      content: Text(quantity > 1
+          ? 'Added $quantity × ${item.name} to your cart'
+          : '${item.name} added to your cart'),
+      action: SnackBarAction(
+        label: 'VIEW CART',
+        textColor: AppTheme.orange,
+        onPressed: () => navigator.push(
+          MaterialPageRoute(builder: (_) => const CartScreen()),
+        ),
+      ),
+    ));
+  } catch (_) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Could not add to cart. Try again.')),
+    );
+  }
+}
+
+/// Hosts the existing [GuestPrompt] in a sheet, and closes itself once the
+/// guest signs in or registers from it (so they land back on the Shop).
+class _GuestLoginSheet extends StatefulWidget {
+  final String feature;
+  const _GuestLoginSheet({required this.feature});
+
+  @override
+  State<_GuestLoginSheet> createState() => _GuestLoginSheetState();
+}
+
+class _GuestLoginSheetState extends State<_GuestLoginSheet> {
   @override
   void initState() {
     super.initState();
@@ -207,7 +251,7 @@ class _WishlistLoginSheetState extends State<_WishlistLoginSheet> {
 
   @override
   Widget build(BuildContext context) =>
-      const SafeArea(child: GuestPrompt(feature: 'Your wishlist'));
+      SafeArea(child: GuestPrompt(feature: widget.feature));
 }
 
 /// Product card used by the Shop grid and the Wishlist screen.
@@ -217,7 +261,12 @@ class MerchProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ProductDetailScreen(item: item)),
+      ),
+      child: Container(
       decoration: BoxDecoration(
         color: AppTheme.card,
         borderRadius: BorderRadius.circular(16),
@@ -303,11 +352,7 @@ class MerchProductCard extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('${item.name} added to cart!')),
-                      );
-                    },
+                    onPressed: () => addToCart(context, item),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.orange,
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -324,6 +369,7 @@ class MerchProductCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

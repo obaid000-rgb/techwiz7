@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/onboarding_slide.dart';
 import '../services/first_run_service.dart';
+import '../services/notification_service.dart';
 import '../services/onboarding_slide_service.dart';
 import '../theme/app_theme.dart';
 import 'user/fan_home_screen.dart';
@@ -23,6 +24,7 @@ Widget preLoginInterestSelection(NavigatorState navigator) =>
         navigator.pushReplacement(
           MaterialPageRoute(builder: (_) => const FanHomeScreen()),
         );
+        NotificationService.instance.maybeAskOnce();
       },
     );
 

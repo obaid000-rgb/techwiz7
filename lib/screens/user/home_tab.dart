@@ -7,6 +7,7 @@ import '../../services/category_service.dart';
 import '../../services/post_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/fandom_heart_button.dart';
 import '../../widgets/lore_card.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/trending_carousel.dart';
@@ -266,6 +267,11 @@ class _HomeTabState extends State<HomeTab> {
                 weight: FontWeight.w600,
               ),
             ),
+            if (value != 'all') ...[
+              const SizedBox(width: 2),
+              FandomHeartButton(
+                  categoryKey: value, categoryName: label, compact: true),
+            ],
           ],
         ),
       ),
@@ -412,18 +418,25 @@ class _HomeTabState extends State<HomeTab> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.local_offer_outlined,
-                            color: Colors.grey, size: 12),
-                        const SizedBox(width: 4),
-                        Text(
-                          post.category.toUpperCase(),
-                          style:
-                              AppTheme.inter(size: 10, color: Colors.grey),
-                        ),
-                      ],
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.local_offer_outlined,
+                              color: Colors.grey, size: 12),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              post.category.toUpperCase(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  AppTheme.inter(size: 10, color: Colors.grey),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () => Navigator.push(
                         context,

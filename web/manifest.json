@@ -1,11 +1,11 @@
 {
-    "name": "fandom_verse",
-    "short_name": "fandom_verse",
+    "name": "Fandom Verse",
+    "short_name": "Fandom Verse",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Fandom Verse – Pocket Edition: lore, conventions and official merch for fans.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

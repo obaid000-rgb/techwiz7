@@ -27,6 +27,31 @@ class UserService {
             : FieldValue.arrayRemove([productId]),
       });
 
+  Future<void> setBio(String uid, String bio) =>
+      FirestoreDb.instance.collection('users').doc(uid).update({'bio': bio});
+
+  Future<void> setAvatarUrl(String uid, String url) =>
+      FirestoreDb.instance.collection('users').doc(uid).update({'avatarUrl': url});
+
+  Future<void> setCategories(String uid, List<String> categories) =>
+      FirestoreDb.instance.collection('users').doc(uid).update({'categories': categories});
+
+  /// Adds/removes one category key on the user's interests (single-field write).
+  Future<void> setCategoryFollowed(String uid, String categoryKey, bool followed) =>
+      FirestoreDb.instance.collection('users').doc(uid).update({
+        'categories': followed
+            ? FieldValue.arrayUnion([categoryKey])
+            : FieldValue.arrayRemove([categoryKey]),
+      });
+
+  /// Adds/removes one post on the user's bookmarks (single-field write).
+  Future<void> setBookmarked(String uid, String postId, bool bookmarked) =>
+      FirestoreDb.instance.collection('users').doc(uid).update({
+        'bookmarkedPostIds': bookmarked
+            ? FieldValue.arrayUnion([postId])
+            : FieldValue.arrayRemove([postId]),
+      });
+
   Future<void> setInterestsAndBadge(
           String uid, List<String> categories, String badge) =>
       FirestoreDb.instance.collection('users').doc(uid).update({

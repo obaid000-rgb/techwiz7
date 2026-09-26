@@ -33,14 +33,68 @@ class _ExploreTabState extends State<ExploreTab> {
 
   bool _showMap = false;
   Position? _fanPosition;
+  bool _locationChecked = false;
+  bool _locating = false;
 
   @override
   void initState() {
     super.initState();
-    LocationService.instance.getCurrentPosition().then((pos) {
-      if (mounted) setState(() => _fanPosition = pos);
+    // This tab is built as soon as Home appears (IndexedStack), so don't
+    // trigger the OS prompt here — only use location if already granted.
+    LocationService.instance.getCurrentPosition(requestIfNeeded: false).then((pos) {
+      if (mounted) {
+        setState(() {
+          _fanPosition = pos;
+          _locationChecked = true;
+        });
+      }
     });
   }
+
+  Future<void> _enableLocation() async {
+    setState(() => _locating = true);
+    final pos = await LocationService.instance.getCurrentPosition();
+    if (!mounted) return;
+    setState(() {
+      _fanPosition = pos;
+      _locating = false;
+    });
+    if (pos == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Location unavailable. Turn on location and allow it for Fandom Verse in Settings.'),
+      ));
+    }
+  }
+
+  Widget _locationBanner() => Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.cyan.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.near_me_outlined, color: AppTheme.cyan, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Sort conventions by distance from you',
+                  style: AppTheme.inter(size: 12, color: Colors.white70)),
+            ),
+            TextButton(
+              onPressed: _locating ? null : _enableLocation,
+              child: _locating
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan))
+                  : Text('USE LOCATION',
+                      style: AppTheme.orbitron(size: 9, color: AppTheme.cyan)),
+            ),
+          ],
+        ),
+      );
 
   String _dateLabel(DateTime d) =>
       '${_months[d.month - 1]} ${d.day.toString().padLeft(2, '0')}';
@@ -88,6 +142,7 @@ class _ExploreTabState extends State<ExploreTab> {
             ],
           ),
           const SizedBox(height: 12),
+          if (_locationChecked && _fanPosition == null) _locationBanner(),
           StreamBuilder<List<EventItem>>(
             stream: EventService.instance.watchEvents(),
             builder: (context, snapshot) {

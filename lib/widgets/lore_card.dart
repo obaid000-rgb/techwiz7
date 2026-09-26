@@ -78,18 +78,25 @@ class LoreCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.local_offer_outlined,
-                            color: Colors.grey, size: 12),
-                        const SizedBox(width: 4),
-                        Text(
-                          post.category.toUpperCase(),
-                          style:
-                              AppTheme.inter(size: 10, color: Colors.grey),
-                        ),
-                      ],
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.local_offer_outlined,
+                              color: Colors.grey, size: 12),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              post.category.toUpperCase(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  AppTheme.inter(size: 10, color: Colors.grey),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () => Navigator.push(
                         context,

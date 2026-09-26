@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/first_run_service.dart';
+import '../services/notification_service.dart';
 import '../services/onboarding_slide_service.dart';
 import '../theme/app_theme.dart';
 import 'onboarding_carousel_screen.dart';
@@ -22,6 +23,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    NotificationService.instance.init().catchError((_) {});
     _start();
   }
 
@@ -38,6 +40,16 @@ class _SplashScreenState extends State<SplashScreen> {
     }
     if (!mounted) return;
     navigator.pushReplacement(MaterialPageRoute(builder: (_) => next));
+
+    final fromNotification = await NotificationService.instance
+        .launchedFromNotification()
+        .catchError((_) => false);
+    if (next is! FanHomeScreen) return;
+    if (fromNotification) {
+      NotificationService.instance.openNotificationsScreen();
+    } else {
+      NotificationService.instance.maybeAskOnce();
+    }
   }
 
   /// Routing decision:

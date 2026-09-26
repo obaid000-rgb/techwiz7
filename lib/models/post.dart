@@ -6,6 +6,15 @@ const List<String> kPostContentTypes = ['News', 'Gallery', 'Video', 'Podcast'];
 /// '' = untagged (shows under "All" only, not under either depth filter).
 const List<String> kPostContentDepths = ['beginner', 'deep'];
 
+/// Deep Dive sub-type, only meaningful when contentDepth == 'deep'.
+/// '' = untyped (shows under Deep Dive's "All" tab only).
+const List<String> kDeepDiveTypes = ['trivia', 'lore', 'interview'];
+const Map<String, String> kDeepDiveTypeLabels = {
+  'trivia': 'Hidden Trivia',
+  'lore': 'Advanced Lore',
+  'interview': 'Interviews',
+};
+
 class Post {
   final String id;
   final String title;
@@ -18,6 +27,7 @@ class Post {
   final String status; // 'active' | 'inactive'
   final String? youtubeUrl;
   final String contentDepth; // '' | 'beginner' | 'deep'
+  final String deepDiveType; // '' | 'trivia' | 'lore' | 'interview'
 
   const Post({
     required this.id,
@@ -31,6 +41,7 @@ class Post {
     this.status = 'active',
     this.youtubeUrl,
     this.contentDepth = '',
+    this.deepDiveType = '',
   });
 
   bool get isActive => status == 'active';
@@ -53,6 +64,9 @@ class Post {
         contentDepth: kPostContentDepths.contains(map['contentDepth'])
             ? map['contentDepth'] as String
             : '',
+        deepDiveType: kDeepDiveTypes.contains(map['deepDiveType'])
+            ? map['deepDiveType'] as String
+            : '',
       );
 
   Map<String, dynamic> toMap() => {
@@ -65,6 +79,7 @@ class Post {
         'isFandomOfTheDay': isFandomOfTheDay,
         'status': status,
         'contentDepth': contentDepth,
+        'deepDiveType': deepDiveType,
         if (youtubeUrl != null) 'youtubeUrl': youtubeUrl,
       };
 
@@ -79,6 +94,7 @@ class Post {
     String? youtubeUrl,
     bool clearYoutubeUrl = false,
     String? contentDepth,
+    String? deepDiveType,
   }) =>
       Post(
         id: id,
@@ -92,5 +108,6 @@ class Post {
         status: status ?? this.status,
         youtubeUrl: clearYoutubeUrl ? null : (youtubeUrl ?? this.youtubeUrl),
         contentDepth: contentDepth ?? this.contentDepth,
+        deepDiveType: deepDiveType ?? this.deepDiveType,
       );
 }

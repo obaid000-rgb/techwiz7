@@ -5,6 +5,8 @@ import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/lore_card.dart';
 import '../../widgets/section_header.dart';
+import 'beginner_fan_hub_screen.dart';
+import 'deep_dive_screen.dart';
 import 'fandom_detail_screen.dart';
 import 'glossary_screen.dart';
 import 'post_list_screen.dart';
@@ -28,6 +30,9 @@ class LoreTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _beginnerHubEntry(context),
+          const SizedBox(height: 16),
+
           // ── Content-type quick filters ───────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -84,6 +89,10 @@ class LoreTab extends StatelessWidget {
           _todaysFandomSection(context),
           const SizedBox(height: 24),
 
+          // ── Deep Dive (expert counterpart to the Beginner Hub) ─────
+          const DeepDiveTeaser(),
+          const SizedBox(height: 24),
+
           // ── Explore Latest ────────────────────────────────────────
           SectionHeader(
             icon: Icons.explore_outlined,
@@ -96,6 +105,47 @@ class LoreTab extends StatelessWidget {
       ),
     );
   }
+
+  Widget _beginnerHubEntry(BuildContext context) => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const BeginnerFanHubScreen()),
+          ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              gradient: LinearGradient(colors: [
+                AppTheme.accent.withValues(alpha: 0.3),
+                AppTheme.cyan.withValues(alpha: 0.12),
+              ]),
+              border: Border.all(color: AppTheme.accent.withValues(alpha: 0.6)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.rocket_launch_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('New here?',
+                          style: AppTheme.orbitron(size: 11, weight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text('Start with the Beginner Fan Hub',
+                          style: AppTheme.inter(size: 12, color: Colors.white70)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+              ],
+            ),
+          ),
+        ),
+      );
 
   Widget _quickFilterCircle(BuildContext context, _ContentTypeFilter filter) {
     return GestureDetector(

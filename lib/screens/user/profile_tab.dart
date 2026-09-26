@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import '../../models/app_category.dart';
 import '../../services/auth_service.dart';
-import '../../services/post_service.dart';
+import '../../services/category_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/guest_prompt.dart';
 import '../../widgets/image_upload_field.dart';
+import '../../widgets/my_fandoms_card.dart';
+import 'notifications_screen.dart';
 import 'offline_downloads_screen.dart';
-import 'post_list_screen.dart';
+import 'purchase_history_screen.dart';
+import 'saved_bookmarks_screen.dart';
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
@@ -34,12 +38,38 @@ class _ProfileContent extends StatefulWidget {
 }
 
 class _ProfileContentState extends State<_ProfileContent> {
-  Future<void> _onAvatarUploaded(String url) async {
-    final updated = widget.user.copyWith(avatarUrl: url);
+  late final Stream<List<AppCategory>> _categories =
+      CategoryService.instance.watchCategories();
+
+  /// Shows [apply] immediately, writes it with [save] (a single-field
+  /// Firestore update), and rolls back with a message if the write fails.
+  Future<void> _saveField(
+    UserData Function(UserData u) apply,
+    UserData Function(UserData u) revert,
+    Future<void> Function(String uid) save,
+    String failMessage,
+  ) async {
+    final user = AuthService.instance.currentUser ?? widget.user;
+    AuthService.instance.userNotifier.value = apply(user);
     try {
-      await UserService.instance.updateUser(updated);
-    } catch (_) {}
-    AuthService.instance.userNotifier.value = updated;
+      await save(user.uid);
+    } catch (_) {
+      final current = AuthService.instance.currentUser;
+      if (current != null) AuthService.instance.userNotifier.value = revert(current);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failMessage)));
+      }
+    }
+  }
+
+  Future<void> _onAvatarUploaded(String url) {
+    final previous = widget.user.avatarUrl;
+    return _saveField(
+      (u) => u.copyWith(avatarUrl: url),
+      (u) => u.copyWith(avatarUrl: previous),
+      (uid) => UserService.instance.setAvatarUrl(uid, url),
+      'Could not save your new avatar. Try again.',
+    );
   }
 
   Future<void> _editBio() async {
@@ -97,13 +127,109 @@ class _ProfileContentState extends State<_ProfileContent> {
         ),
       ),
     );
-    if (result == null) return;
-    final updated = widget.user.copyWith(bio: result);
-    try {
-      await UserService.instance.updateUser(updated);
-    } catch (_) {}
-    AuthService.instance.userNotifier.value = updated;
+    if (result == null || result == widget.user.bio) return;
+    final previous = widget.user.bio;
+    await _saveField(
+      (u) => u.copyWith(bio: result),
+      (u) => u.copyWith(bio: previous),
+      (uid) => UserService.instance.setBio(uid, result),
+      'Could not save your bio. Try again.',
+    );
   }
+
+  Future<void> _editFandoms(List<AppCategory> allCategories) async {
+    final active = allCategories.where((c) => c.isActive).toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+    final selected = Set<String>.from(widget.user.categories);
+    final result = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('My Fandoms', style: AppTheme.orbitron(size: 13)),
+                const SizedBox(height: 4),
+                Text('Pick the fandoms you follow. Used to tailor your feed.',
+                    style: AppTheme.inter(size: 11, color: Colors.grey)),
+                const SizedBox(height: 14),
+                if (active.isEmpty)
+                  Text('No categories available yet.',
+                      style: AppTheme.inter(size: 12, color: Colors.grey))
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: active.map((c) {
+                      final on = selected.contains(c.key);
+                      return FilterChip(
+                        label: Text(c.name),
+                        selected: on,
+                        onSelected: (v) => setSheet(() {
+                          v ? selected.add(c.key) : selected.remove(c.key);
+                        }),
+                        showCheckmark: true,
+                        checkmarkColor: Colors.white,
+                        selectedColor: AppTheme.accent.withValues(alpha: 0.35),
+                        backgroundColor: AppTheme.bg,
+                        side: BorderSide(color: on ? AppTheme.accent : AppTheme.border),
+                        labelStyle: AppTheme.inter(
+                            size: 12,
+                            color: on ? Colors.white : Colors.white70,
+                            weight: on ? FontWeight.w700 : FontWeight.w400),
+                      );
+                    }).toList(),
+                  ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    // At least one is required — an empty list would send the
+                    // user back through the Select Fandoms screen.
+                    onPressed: selected.isEmpty ? null : () => Navigator.pop(ctx, selected.toList()),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accent,
+                      disabledBackgroundColor: AppTheme.border,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: Text(selected.isEmpty ? 'PICK AT LEAST ONE' : 'SAVE',
+                        style: AppTheme.orbitron(size: 10, color: Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (result == null) return;
+    final previous = List<String>.from(widget.user.categories);
+    await _saveField(
+      (u) => u.copyWith(categories: result),
+      (u) => u.copyWith(categories: previous),
+      (uid) => UserService.instance.setCategories(uid, result),
+      'Could not save your fandoms. Try again.',
+    );
+  }
+
+  Widget _fandomsCard(UserData user) => StreamBuilder<List<AppCategory>>(
+        stream: _categories,
+        builder: (context, snapshot) => MyFandomsCard(
+          categoryKeys: user.categories,
+          categories: snapshot.data,
+          hasError: snapshot.hasError,
+          onEdit: snapshot.hasData ? () => _editFandoms(snapshot.data!) : null,
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -177,6 +303,8 @@ class _ProfileContentState extends State<_ProfileContent> {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          _fandomsCard(user),
           const SizedBox(height: 20),
 
           // Stats row
@@ -190,7 +318,7 @@ class _ProfileContentState extends State<_ProfileContent> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _stat('${user.bookmarkedPostIds.length}', 'Liked'),
+                _stat('${user.bookmarkedPostIds.length}', 'Saved'),
                 Container(width: 1, height: 28, color: AppTheme.border),
                 _stat('${user.savedEvents}', 'Events'),
                 Container(width: 1, height: 28, color: AppTheme.border),
@@ -202,30 +330,39 @@ class _ProfileContentState extends State<_ProfileContent> {
 
           _menuTile(
             Icons.bookmark_outline,
-            'Liked Fandoms',
+            'Saved Bookmarks',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SavedBookmarksScreen()),
+            ),
+            subtitle: 'Synced to your account · needs internet',
+          ),
+          _menuTile(
+            Icons.receipt_long_outlined,
+            'Purchase History',
             () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => PostListScreen(
-                  title: 'Liked Fandoms',
-                  stream: PostService.instance.watchPosts().map((posts) => posts
-                      .where((p) => user.bookmarkedPostIds.contains(p.id))
-                      .toList()),
-                  emptyMessage:
-                      'No liked fandoms yet — bookmark posts from Home to see them here.',
-                ),
-              ),
+                  builder: (_) => PurchaseHistoryScreen(uid: user.uid)),
             ),
           ),
           _menuTile(
             Icons.download_for_offline_outlined,
-            'Downloads',
+            'Offline Downloads',
             () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const OfflineDownloadsScreen()),
             ),
+            subtitle: 'Saved on this device · works without internet',
           ),
-          _menuTile(Icons.notifications_none, 'Push Notifications', () {}),
+          _menuTile(
+            Icons.notifications_none,
+            'Push Notifications',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
+          ),
           _menuTile(Icons.security, 'Account Security', () {}),
           const SizedBox(height: 20),
 
@@ -260,7 +397,7 @@ class _ProfileContentState extends State<_ProfileContent> {
     );
   }
 
-  Widget _menuTile(IconData icon, String title, VoidCallback onTap) {
+  Widget _menuTile(IconData icon, String title, VoidCallback onTap, {String? subtitle}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -271,6 +408,9 @@ class _ProfileContentState extends State<_ProfileContent> {
       child: ListTile(
         leading: Icon(icon, color: AppTheme.cyan, size: 20),
         title: Text(title, style: AppTheme.inter(size: 13)),
+        subtitle: subtitle == null
+            ? null
+            : Text(subtitle, style: AppTheme.inter(size: 10, color: Colors.grey)),
         trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 14),
         onTap: onTap,
       ),

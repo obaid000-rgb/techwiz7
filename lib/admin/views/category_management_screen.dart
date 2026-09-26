@@ -240,14 +240,18 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                         style:
                             AppTheme.inter(size: 10, color: Colors.white38)),
                   ],
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [_postCountBadge(cat), _statusBadge(cat)],
+                  ),
                 ],
               ),
             ),
-            _postCountBadge(cat),
-            const SizedBox(width: 4),
-            _statusBadge(cat),
             const SizedBox(width: 4),
             IconButton(
+              visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.folder_open_outlined,
                   color: AppTheme.orange, size: 18),
               onPressed: () => Navigator.push(
@@ -258,6 +262,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
               tooltip: 'View Content',
             ),
             IconButton(
+              visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.edit_outlined,
                   color: AppTheme.cyan, size: 18),
               onPressed: () => Navigator.push(
@@ -268,6 +273,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
               tooltip: 'Edit',
             ),
             IconButton(
+              visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.delete_outline,
                   color: Colors.redAccent, size: 18),
               onPressed: () => _confirmDelete(context, cat),

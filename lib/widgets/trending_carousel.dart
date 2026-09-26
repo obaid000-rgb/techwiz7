@@ -3,6 +3,7 @@ import '../models/app_category.dart';
 import '../screens/user/category_detail_screen.dart';
 import '../services/category_service.dart';
 import '../theme/app_theme.dart';
+import 'fandom_heart_button.dart';
 
 class TrendingCarousel extends StatefulWidget {
   const TrendingCarousel({super.key});
@@ -225,6 +226,11 @@ class _SlideCard extends StatelessWidget {
                     ),
                 ],
               ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: FandomHeartButton(categoryKey: cat.key, categoryName: cat.name),
             ),
           ],
         ),

@@ -6,6 +6,7 @@ import 'category_management_screen.dart';
 import 'content_moderation_screen.dart';
 import 'glossary_management_screen.dart';
 import 'onboarding_slide_management_screen.dart';
+import 'order_management_screen.dart';
 import 'user_management_screen.dart';
 
 // ── Nav-item config ────────────────────────────────────────────────────────────
@@ -29,12 +30,22 @@ class _NavItem {
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key});
 
+  /// Switches the shell to the section with this sidebar [label] — the same
+  /// index the rail/drawer sets. Used by dashboard cards.
+  static void openSection(BuildContext context, String label) =>
+      context.findAncestorStateOfType<_AdminShellState>()?._selectByLabel(label);
+
   @override
   State<AdminShell> createState() => _AdminShellState();
 }
 
 class _AdminShellState extends State<AdminShell> {
   int _selectedIndex = 0;
+
+  void _selectByLabel(String label) {
+    final i = _navItems.indexWhere((e) => e.label == label);
+    if (i >= 0) setState(() => _selectedIndex = i);
+  }
 
   static final List<_NavItem> _navItems = [
     _NavItem(
@@ -54,6 +65,12 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Events',
       color: AppTheme.pink,
       child: const EventsSection(),
+    ),
+    _NavItem(
+      icon: Icons.receipt_long_outlined,
+      label: 'Orders',
+      color: AppTheme.orange,
+      child: const OrderManagementScreen(),
     ),
     _NavItem(
       icon: Icons.people_outline,
