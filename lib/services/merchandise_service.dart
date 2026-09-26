@@ -11,6 +11,14 @@ class MerchandiseService {
       .map((s) =>
           s.docs.map((d) => Merchandise.fromMap(d.data(), d.id)).toList());
 
+  Stream<List<Merchandise>> watchMerchandiseByCategory(String categoryKey) =>
+      FirestoreDb.instance
+          .collection('merchandise')
+          .where('category', isEqualTo: categoryKey)
+          .snapshots()
+          .map((s) =>
+              s.docs.map((d) => Merchandise.fromMap(d.data(), d.id)).toList());
+
   Future<void> addMerchandise(Merchandise item) =>
       FirestoreDb.instance.collection('merchandise').add(item.toMap());
 

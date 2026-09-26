@@ -8,7 +8,7 @@ class Merchandise {
 
   const Merchandise({
     required this.id,
-    required this.name,
+    required this.name, 
     required this.price,
     required this.category,
     this.imageUrl = '',

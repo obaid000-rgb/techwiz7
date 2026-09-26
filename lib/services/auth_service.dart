@@ -24,6 +24,7 @@ class UserData {
   final String bio;
   final String badge; // '' = none selected (pre-onboarding-feature accounts)
   final List<String> bookmarkedPostIds;
+  final List<String> wishlistedProductIds;
 
   const UserData({
     required this.uid,
@@ -38,6 +39,7 @@ class UserData {
     this.bio = '',
     this.badge = '',
     this.bookmarkedPostIds = const [],
+    this.wishlistedProductIds = const [],
   });
 
   bool get isAdmin => role == 'admin';
@@ -59,6 +61,8 @@ class UserData {
       bio: map['bio'] ?? '',
       badge: map['badge'] ?? '',
       bookmarkedPostIds: List<String>.from(map['bookmarkedPostIds'] ?? []),
+      wishlistedProductIds:
+          List<String>.from(map['wishlistedProductIds'] ?? []),
     );
   }
 
@@ -74,6 +78,7 @@ class UserData {
         'bio': bio,
         'badge': badge,
         'bookmarkedPostIds': bookmarkedPostIds,
+        'wishlistedProductIds': wishlistedProductIds,
       };
 
   UserData copyWith({
@@ -83,6 +88,7 @@ class UserData {
     String? bio,
     String? badge,
     List<String>? bookmarkedPostIds,
+    List<String>? wishlistedProductIds,
   }) =>
       UserData(
         uid: uid,
@@ -97,6 +103,7 @@ class UserData {
         bio: bio ?? this.bio,
         badge: badge ?? this.badge,
         bookmarkedPostIds: bookmarkedPostIds ?? this.bookmarkedPostIds,
+        wishlistedProductIds: wishlistedProductIds ?? this.wishlistedProductIds,
       );
 }
 

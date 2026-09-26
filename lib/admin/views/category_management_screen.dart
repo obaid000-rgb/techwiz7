@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/app_category.dart';
 import '../../services/category_service.dart';
 import '../../theme/app_theme.dart';
+import 'category_content_screen.dart';
 import 'category_form_screen.dart';
 
 class CategoryManagementScreen extends StatefulWidget {
@@ -243,6 +244,16 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
             const SizedBox(width: 4),
             _statusBadge(cat),
             const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.folder_open_outlined,
+                  color: AppTheme.orange, size: 18),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => CategoryContentScreen(category: cat)),
+              ),
+              tooltip: 'View Content',
+            ),
             IconButton(
               icon: const Icon(Icons.edit_outlined,
                   color: AppTheme.cyan, size: 18),

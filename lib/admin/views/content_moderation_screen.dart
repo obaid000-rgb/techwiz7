@@ -88,7 +88,7 @@ class _PostsTab extends StatelessWidget {
                       separatorBuilder: (context, i) =>
                           const SizedBox(height: 8),
                       itemBuilder: (context, i) =>
-                          _postRow(context, posts[i]),
+                          adminPostRow(context, posts[i]),
                     ),
             ),
           ],
@@ -96,27 +96,30 @@ class _PostsTab extends StatelessWidget {
       },
     );
   }
+}
 
-  Widget _postRow(BuildContext context, Post post) {
-    return _itemCard(
+/// Admin list row for a Post (edit → PostFormScreen, delete with confirm).
+/// Public so other admin screens (e.g. CategoryContentScreen) show the
+/// exact same row.
+Widget adminPostRow(BuildContext context, Post post) {
+  return _itemCard(
+    context,
+    icon: Icons.article_outlined,
+    iconColor: AppTheme.cyan,
+    title: post.title,
+    subtitle:
+        '${post.category.isEmpty ? 'No category' : post.category}  •  ${_fmtDate(post.createdAt)}',
+    onEdit: () => Navigator.push(
       context,
-      icon: Icons.article_outlined,
-      iconColor: AppTheme.cyan,
-      title: post.title,
-      subtitle:
-          '${post.category.isEmpty ? 'No category' : post.category}  •  ${_fmtDate(post.createdAt)}',
-      onEdit: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => PostFormScreen(existing: post)),
-      ),
-      onDelete: () => _confirmDelete(
-        context,
-        'Delete "${post.title}"?',
-        () => PostService.instance.deletePost(post.id),
-      ),
-    );
-  }
+      MaterialPageRoute(
+          builder: (_) => PostFormScreen(existing: post)),
+    ),
+    onDelete: () => _confirmDelete(
+      context,
+      'Delete "${post.title}"?',
+      () => PostService.instance.deletePost(post.id),
+    ),
+  );
 }
 
 // ── Merchandise tab ───────────────────────────────────────────────────────────
@@ -160,7 +163,7 @@ class _MerchandiseTab extends StatelessWidget {
                       separatorBuilder: (context, i) =>
                           const SizedBox(height: 8),
                       itemBuilder: (context, i) =>
-                          _merchRow(context, items[i]),
+                          adminMerchRow(context, items[i]),
                     ),
             ),
           ],
@@ -168,27 +171,29 @@ class _MerchandiseTab extends StatelessWidget {
       },
     );
   }
+}
 
-  Widget _merchRow(BuildContext context, Merchandise item) {
-    return _itemCard(
+/// Admin list row for a Merchandise item (edit → MerchandiseFormScreen,
+/// delete with confirm). Public for reuse, like [adminPostRow].
+Widget adminMerchRow(BuildContext context, Merchandise item) {
+  return _itemCard(
+    context,
+    icon: Icons.shopping_bag_outlined,
+    iconColor: AppTheme.orange,
+    title: item.name,
+    subtitle:
+        '\$${item.price.toStringAsFixed(2)}  •  ${item.category.isEmpty ? 'No category' : item.category}',
+    onEdit: () => Navigator.push(
       context,
-      icon: Icons.shopping_bag_outlined,
-      iconColor: AppTheme.orange,
-      title: item.name,
-      subtitle:
-          '\$${item.price.toStringAsFixed(2)}  •  ${item.category.isEmpty ? 'No category' : item.category}',
-      onEdit: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => MerchandiseFormScreen(existing: item)),
-      ),
-      onDelete: () => _confirmDelete(
-        context,
-        'Delete "${item.name}"?',
-        () => MerchandiseService.instance.deleteMerchandise(item.id),
-      ),
-    );
-  }
+      MaterialPageRoute(
+          builder: (_) => MerchandiseFormScreen(existing: item)),
+    ),
+    onDelete: () => _confirmDelete(
+      context,
+      'Delete "${item.name}"?',
+      () => MerchandiseService.instance.deleteMerchandise(item.id),
+    ),
+  );
 }
 
 // ── Events section (standalone sidebar entry) ─────────────────────────────────

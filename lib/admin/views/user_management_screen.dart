@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import '../../services/firestore_db.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -395,18 +396,15 @@ class _UserEditDialogState extends State<_UserEditDialog> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final updated = UserData(
-        uid: widget.user.uid,
-        name: _nameCtr.text.trim(),
-        email: widget.user.email,
-        avatarUrl: widget.user.avatarUrl,
-        savedEvents: widget.user.savedEvents,
-        bookmarks: widget.user.bookmarks,
-        rank: widget.user.rank,
-        role: _role,
-        categories: widget.user.categories,
-      );
-      await UserService.instance.updateUser(updated);
+      // Write only the fields this dialog edits. A full UserData.toMap()
+      // here would reset every other field (bio, badge, bookmarks, …).
+      await FirestoreDb.instance
+          .collection('users')
+          .doc(widget.user.uid)
+          .update({
+        'name': _nameCtr.text.trim(),
+        'role': _role,
+      });
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) setState(() => _saving = false);
