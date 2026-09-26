@@ -39,7 +39,11 @@ class OnboardingSlideManagementScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 4),
                       itemCount: slides.length,
-                      onReorderItem: (oldIndex, newIndex) {
+                      // onReorder (not the newer onReorderItem) so older
+                      // Flutter SDKs build.
+                      // ignore: deprecated_member_use
+                      onReorder: (oldIndex, newIndex) {
+                        if (newIndex > oldIndex) newIndex -= 1;
                         final reordered = List<OnboardingSlide>.from(slides);
                         final moved = reordered.removeAt(oldIndex);
                         reordered.insert(newIndex, moved);

@@ -178,7 +178,10 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
       ReorderableListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         itemCount: cats.length,
-        onReorderItem: (oldIndex, newIndex) {
+        // onReorder (not the newer onReorderItem) so older Flutter SDKs build.
+        // ignore: deprecated_member_use
+        onReorder: (oldIndex, newIndex) {
+          if (newIndex > oldIndex) newIndex -= 1;
           final reordered = List<AppCategory>.from(cats);
           final moved = reordered.removeAt(oldIndex);
           reordered.insert(newIndex, moved);
