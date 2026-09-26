@@ -105,8 +105,9 @@ class _CategoryContentScreenState extends State<CategoryContentScreen> {
     required Widget Function(T) row,
   }) {
     if (snap.hasError) {
+      debugPrint('$errorText: ${snap.error}');
       return [
-        _stateBox(Icons.wifi_off, '$errorText: ${snap.error}',
+        _stateBox(Icons.wifi_off, '$errorText. Check your connection and try again.',
             Colors.redAccent),
       ];
     }

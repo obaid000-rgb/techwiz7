@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../models/order_model.dart';
+import '../../services/auth_service.dart';
 import '../../services/order_service.dart';
 import '../../theme/app_theme.dart';
+import 'invoice_screen.dart';
 
 String formatOrderDate(DateTime d) {
   const months = [
@@ -93,10 +95,12 @@ class _OrderReceiptScreenState extends State<OrderReceiptScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               if (widget.justPlaced) ...[
-                _placedBanner(),
+                _placedBanner(order),
                 const SizedBox(height: 16),
               ],
               OrderReceiptBody(order: order),
+              const SizedBox(height: 14),
+              _invoiceButton(order),
               if (widget.justPlaced) ...[
                 const SizedBox(height: 24),
                 SizedBox(
@@ -121,7 +125,34 @@ class _OrderReceiptScreenState extends State<OrderReceiptScreen> {
     );
   }
 
-  Widget _placedBanner() => Container(
+  Widget _invoiceButton(OrderModel order) => SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () {
+            final user = AuthService.instance.currentUser;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => InvoiceScreen(
+                  order: order,
+                  customerName: user?.name ?? '',
+                  customerEmail: user?.email ?? '',
+                ),
+              ),
+            );
+          },
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: AppTheme.accent),
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          icon: const Icon(Icons.receipt_long_rounded, color: AppTheme.accent, size: 18),
+          label: Text('VIEW INVOICE',
+              style: AppTheme.orbitron(size: 10, color: AppTheme.accent, weight: FontWeight.w700)),
+        ),
+      );
+
+  Widget _placedBanner(OrderModel order) => Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.green.withValues(alpha: 0.1),
@@ -138,6 +169,9 @@ class _OrderReceiptScreenState extends State<OrderReceiptScreen> {
                 children: [
                   Text('Order placed!',
                       style: AppTheme.orbitron(size: 13, weight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text('Invoice ${order.invoiceNumber} was generated automatically.',
+                      style: AppTheme.inter(size: 11, color: Colors.white70)),
                   const SizedBox(height: 2),
                   Text('You can find it any time under Profile → Purchase History.',
                       style: AppTheme.inter(size: 11, color: Colors.grey)),

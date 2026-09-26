@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/order_model.dart';
+import '../../screens/user/invoice_screen.dart';
 import '../../screens/user/order_receipt_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/order_service.dart';
@@ -39,8 +40,9 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
               return const Center(child: CircularProgressIndicator(color: AppTheme.orange));
             }
             if (snapshot.hasError) {
+              debugPrint('Orders load error: ${snapshot.error}');
               return Center(
-                  child: Text('Error: ${snapshot.error}',
+                  child: Text('Could not load orders. Check your connection and try again.',
                       style: AppTheme.inter(color: Colors.redAccent)));
             }
             final orders = snapshot.data ?? [];
@@ -64,8 +66,8 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           itemCount: orders.length,
                           separatorBuilder: (context, i) => const SizedBox(height: 8),
-                          itemBuilder: (context, i) => _row(
-                              context, orders[i], orderCustomerLabel(usersById[orders[i].userId])),
+                          itemBuilder: (context, i) =>
+                              _row(context, orders[i], usersById[orders[i].userId]),
                         ),
                 ),
               ],
@@ -76,12 +78,19 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
     );
   }
 
-  Widget _row(BuildContext context, OrderModel order, String customer) => InkWell(
+  Widget _row(BuildContext context, OrderModel order, UserData? user) {
+    final customer = orderCustomerLabel(user);
+    return InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => AdminOrderDetailScreen(orderId: order.orderId, customer: customer),
+            builder: (_) => AdminOrderDetailScreen(
+              orderId: order.orderId,
+              customer: customer,
+              customerName: user?.name ?? '',
+              customerEmail: user?.email ?? '',
+            ),
           ),
         ),
         child: Container(
@@ -129,6 +138,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
           ),
         ),
       );
+  }
 
   Widget _empty() => Center(
         child: Column(
@@ -148,7 +158,15 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
 class AdminOrderDetailScreen extends StatefulWidget {
   final String orderId;
   final String customer;
-  const AdminOrderDetailScreen({super.key, required this.orderId, required this.customer});
+  final String customerName;
+  final String customerEmail;
+  const AdminOrderDetailScreen({
+    super.key,
+    required this.orderId,
+    required this.customer,
+    this.customerName = '',
+    this.customerEmail = '',
+  });
 
   @override
   State<AdminOrderDetailScreen> createState() => _AdminOrderDetailScreenState();
@@ -163,9 +181,10 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
     try {
       await OrderService.instance.updateStatus(widget.orderId, status);
     } catch (e) {
+      debugPrint('Order status update failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not update status: $e')));
+            .showSnackBar(SnackBar(content: Text('Could not update the order status. Try again.')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -193,8 +212,9 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
         stream: _stream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
+            debugPrint('Orders load error: ${snapshot.error}');
             return Center(
-                child: Text('Error: ${snapshot.error}',
+                child: Text('Could not load this order. Check your connection and try again.',
                     style: AppTheme.inter(color: Colors.redAccent)));
           }
           if (!snapshot.hasData && snapshot.connectionState == ConnectionState.waiting) {
@@ -252,6 +272,27 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
               ],
               const SizedBox(height: 20),
               OrderReceiptBody(order: order),
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => InvoiceScreen(
+                      order: order,
+                      customerName: widget.customerName.isEmpty ? widget.customer : widget.customerName,
+                      customerEmail: widget.customerEmail,
+                    ),
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppTheme.accent),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.receipt_long_rounded, color: AppTheme.accent, size: 18),
+                label: Text('VIEW INVOICE',
+                    style: AppTheme.orbitron(size: 10, color: AppTheme.accent, weight: FontWeight.w700)),
+              ),
             ],
           );
         },

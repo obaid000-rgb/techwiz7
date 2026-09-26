@@ -55,6 +55,8 @@ class _LoginScreenState extends State<LoginScreen> {
         return 'This account has been disabled.';
       case 'too-many-requests':
         return 'Too many attempts. Please try again later.';
+      case 'network-request-failed':
+        return 'No internet connection. Check your connection and try again.';
       default:
         return 'Login failed. Please try again.';
     }

@@ -41,8 +41,9 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
               child: CircularProgressIndicator(color: AppTheme.orange));
         }
         if (snapshot.hasError) {
+          debugPrint('Categories load error: ${snapshot.error}');
           return Center(
-              child: Text('Error: ${snapshot.error}',
+              child: Text('Could not load categories. Check your connection and try again.',
                   style: AppTheme.inter(color: Colors.red)));
         }
         final cats = List<AppCategory>.from(snapshot.data ?? [])

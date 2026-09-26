@@ -18,14 +18,51 @@ class UserService {
       .update(user.toMap());
 
   /// Adds/removes one product on the user's wishlist. Writes only that
-  /// array field (arrayUnion/arrayRemove), so it can't overwrite anything
-  /// else on the user document with stale in-memory values.
-  Future<void> setWishlisted(String uid, String productId, bool wishlisted) =>
-      FirestoreDb.instance.collection('users').doc(uid).update({
+  /// array entry (arrayUnion/arrayRemove) plus that product's price baseline
+  /// (`wishlistPrices.<id>`, via a field path), in one update — so it can't
+  /// overwrite anything else on the user document with stale values.
+  /// [price] is the product's price at the moment it's added.
+  Future<void> setWishlisted(String uid, String productId, bool wishlisted,
+          {double? price}) =>
+      FirestoreDb.instance.collection('users').doc(uid).update(<Object, Object?>{
         'wishlistedProductIds': wishlisted
             ? FieldValue.arrayUnion([productId])
             : FieldValue.arrayRemove([productId]),
+        FieldPath(['wishlistPrices', productId]): wishlisted && price != null
+            ? {'lastSeenPrice': price}
+            : FieldValue.delete(),
       });
+
+  /// Writes several wishlist price-baseline changes in one partial update.
+  /// Keys are product ids. Each leaf is written explicitly — previousPrice is
+  /// set or deleted, never left to "replace the nested map" semantics.
+  Future<void> setWishlistPrices(String uid, Map<String, WishlistPrice> entries) {
+    if (entries.isEmpty) return Future.value();
+    return FirestoreDb.instance.collection('users').doc(uid).update(<Object, Object?>{
+      for (final e in entries.entries) ...{
+        FieldPath(['wishlistPrices', e.key, 'lastSeenPrice']): e.value.lastSeenPrice,
+        FieldPath(['wishlistPrices', e.key, 'previousPrice']):
+            e.value.previousPrice ?? FieldValue.delete(),
+      },
+    });
+  }
+
+  /// Edit Profile save: writes only the given basics (name / bio / avatarUrl)
+  /// as one partial update — every other field on the user doc is untouched.
+  Future<void> updateProfileBasics(
+    String uid, {
+    String? name,
+    String? bio,
+    String? avatarUrl,
+  }) {
+    final changes = <String, dynamic>{
+      'name': ?name,
+      'bio': ?bio,
+      'avatarUrl': ?avatarUrl,
+    };
+    if (changes.isEmpty) return Future.value();
+    return FirestoreDb.instance.collection('users').doc(uid).update(changes);
+  }
 
   Future<void> setBio(String uid, String bio) =>
       FirestoreDb.instance.collection('users').doc(uid).update({'bio': bio});

@@ -29,6 +29,13 @@ class EventItem {
 
   bool get hasCoordinates => latitude != null && longitude != null;
 
+  /// True if the event is today or later. Compared by calendar day (event
+  /// dates are picked as dates, stored at midnight), so today's events stay.
+  bool get isUpcoming {
+    final now = DateTime.now();
+    return !date.isBefore(DateTime(now.year, now.month, now.day));
+  }
+
   factory EventItem.fromMap(Map<String, dynamic> map, String docId) =>
       EventItem(
         id: docId,

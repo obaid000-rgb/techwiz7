@@ -78,7 +78,9 @@ class _SignupScreenState extends State<SignupScreen> {
       case 'weak-password':
         return 'Password must be at least 6 characters.';
       case 'operation-not-allowed':
-        return 'Email/password accounts are not enabled.';
+        return 'Sign-up is not available right now. Please try again later.';
+      case 'network-request-failed':
+        return 'No internet connection. Check your connection and try again.';
       default:
         return 'Registration failed. Please try again.';
     }

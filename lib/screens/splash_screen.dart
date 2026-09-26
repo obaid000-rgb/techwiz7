@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/first_run_service.dart';
 import '../services/notification_service.dart';
+import '../services/trending_service.dart';
+import '../services/wishlist_price_service.dart';
 import '../services/onboarding_slide_service.dart';
 import '../theme/app_theme.dart';
 import 'onboarding_carousel_screen.dart';
@@ -24,6 +26,9 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     NotificationService.instance.init().catchError((_) {});
+    // Wishlist price checks on sign-in and every return to the foreground.
+    WishlistPriceService.instance.start();
+    TrendingService.instance.start();
     _start();
   }
 

@@ -93,7 +93,7 @@ class _SavedBookmarksScreenState extends State<SavedBookmarksScreen> {
               ];
               if (posts.isEmpty) {
                 return _center(Icons.bookmark_border, 'No saved bookmarks yet',
-                    'Tap the bookmark icon on any post in Feed to save it here.');
+                    'Tap the bookmark icon on any post in Feed to save it here. Bookmarks are quick links and need internet to open.');
               }
               return ListView.builder(
                 padding: const EdgeInsets.all(16),

@@ -116,10 +116,11 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
+      debugPrint('Save failed: $e');
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = e.toString();
+          _error = 'Could not save. Check your connection and try again.';
         });
       }
     }
@@ -263,7 +264,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                         Text('Featured in Carousel',
                             style: AppTheme.inter(
                                 size: 13, color: Colors.white, weight: FontWeight.w600)),
-                        Text('Shows this category in the Explore slider',
+                        Text('Shows this category in the carousel on Feed',
                             style: AppTheme.inter(size: 10, color: Colors.grey)),
                       ],
                     ),

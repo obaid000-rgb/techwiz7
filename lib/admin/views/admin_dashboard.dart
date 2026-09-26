@@ -165,8 +165,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 _RecentOrders(
                   snap: orderSnap,
                   usersById: usersById,
-                  onOpen: (order, customer) => _push(
-                      AdminOrderDetailScreen(orderId: order.orderId, customer: customer)),
+                  onOpen: (order, customer) => _push(AdminOrderDetailScreen(
+                    orderId: order.orderId,
+                    customer: customer,
+                    customerName: usersById[order.userId]?.name ?? '',
+                    customerEmail: usersById[order.userId]?.email ?? '',
+                  )),
                 ),
               ],
             ),

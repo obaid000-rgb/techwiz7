@@ -58,6 +58,15 @@ class OrderModel {
 
   int get itemCount => items.fold(0, (acc, i) => acc + i.quantity);
 
+  /// Invoice number, generated from the order's date and id (nothing extra
+  /// is stored), e.g. INV-20260927-A1B2C3D4.
+  String get invoiceNumber {
+    final d = createdAt;
+    final date = '${d.year}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
+    final ref = (orderId.length > 8 ? orderId.substring(0, 8) : orderId).toUpperCase();
+    return 'INV-$date-$ref';
+  }
+
   /// Short human-readable order number.
   String get displayNumber =>
       '#${orderId.length > 8 ? orderId.substring(0, 8) : orderId}'.toUpperCase();

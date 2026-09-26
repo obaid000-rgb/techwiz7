@@ -46,20 +46,21 @@ class _CartCountState extends State<_CartCount> {
             MaterialPageRoute(builder: (_) => const CartScreen()),
           ),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              color: AppTheme.orange.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppTheme.orange.withValues(alpha: 0.5)),
+              color: AppTheme.card,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: AppTheme.border),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.shopping_cart_outlined, color: AppTheme.orange, size: 14),
-                const SizedBox(width: 5),
-                Text(count > 0 ? 'Cart ($count)' : 'Cart',
+                const Icon(Icons.shopping_bag_outlined, color: AppTheme.orange, size: 20),
+                const SizedBox(width: 6),
+                Text(count > 0 ? 'Cart · $count' : 'Cart',
                     style: AppTheme.inter(
-                        size: 11, color: AppTheme.orange, weight: FontWeight.w600)),
+                        size: 13, color: Colors.white, weight: FontWeight.w600)),
               ],
             ),
           ),

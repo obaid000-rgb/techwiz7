@@ -38,8 +38,9 @@ class _GlossaryManagementScreenState extends State<GlossaryManagementScreen> {
           return const Center(child: CircularProgressIndicator(color: AppTheme.accent));
         }
         if (snapshot.hasError) {
+          debugPrint('Glossary load error: ${snapshot.error}');
           return Center(
-              child: Text('Error: ${snapshot.error}', style: AppTheme.inter(color: Colors.red)));
+              child: Text('Could not load glossary terms. Check your connection and try again.', style: AppTheme.inter(color: Colors.red)));
         }
         final terms = snapshot.data ?? [];
         final filtered = _query.isEmpty

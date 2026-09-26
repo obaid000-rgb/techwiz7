@@ -9,6 +9,9 @@ class AppTheme {
   static const Color cyan = Color(0xFF06B6D4);
   static const Color orange = Color(0xFFF97316);
   static const Color pink = Color(0xFFEC4899);
+  // Readable text tones on the dark background (secondary ≈ 9:1, muted ≈ 5.5:1).
+  static const Color textSecondary = Color(0xFFC4C4D4);
+  static const Color textMuted = Color(0xFF8A8AA0);
 
   static TextStyle orbitron({
     double size = 13,

@@ -17,8 +17,9 @@ class UserManagementScreen extends StatelessWidget {
               child: CircularProgressIndicator(color: AppTheme.accent));
         }
         if (snapshot.hasError) {
+          debugPrint('Users load error: ${snapshot.error}');
           return Center(
-              child: Text('Error: ${snapshot.error}',
+              child: Text('Could not load users. Check your connection and try again.',
                   style: AppTheme.inter(color: Colors.redAccent)));
         }
         final users = snapshot.data ?? [];

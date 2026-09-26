@@ -63,7 +63,7 @@ class _PostsTab extends StatelessWidget {
               child: CircularProgressIndicator(color: AppTheme.cyan));
         }
         if (snapshot.hasError) {
-          return _errorView(snapshot.error.toString());
+          return _errorView('lore posts', snapshot.error);
         }
         final posts = snapshot.data ?? [];
         return Column(
@@ -137,7 +137,7 @@ class _MerchandiseTab extends StatelessWidget {
               child: CircularProgressIndicator(color: AppTheme.orange));
         }
         if (snapshot.hasError) {
-          return _errorView(snapshot.error.toString());
+          return _errorView('merchandise', snapshot.error);
         }
         final items = snapshot.data ?? [];
         return Column(
@@ -211,7 +211,7 @@ class EventsSection extends StatelessWidget {
               child: CircularProgressIndicator(color: AppTheme.pink));
         }
         if (snapshot.hasError) {
-          return _errorView(snapshot.error.toString());
+          return _errorView('events', snapshot.error);
         }
         final events = snapshot.data ?? [];
         return Column(
@@ -367,14 +367,17 @@ Widget _itemCard(
       ),
     );
 
-Widget _errorView(String message) => Center(
+Widget _errorView(String what, Object? error) {
+  debugPrint('Content moderation ($what) load error: $error');
+  return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Text('Error: $message',
+        child: Text('Could not load $what. Check your connection and try again.',
             style: AppTheme.inter(size: 12, color: Colors.redAccent),
             textAlign: TextAlign.center),
       ),
     );
+}
 
 Widget _emptyView(String title, String subtitle) => Center(
       child: Column(

@@ -5,6 +5,7 @@ import '../models/post.dart';
 import '../screens/user/fandom_detail_screen.dart';
 import '../theme/app_theme.dart';
 import '../utils/youtube_utils.dart';
+import 'trending_badge.dart';
 
 /// Shared post/lore card used across the Category Detail, content-type
 /// filter, and Explore Latest list screens — mirrors the card styling
@@ -53,6 +54,7 @@ class LoreCard extends StatelessWidget {
                   ),
                 ),
               ),
+              Positioned(top: 8, right: 8, child: TrendingBadge(postId: post.id)),
             ],
           ),
           Padding(

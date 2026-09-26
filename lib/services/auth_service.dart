@@ -11,6 +11,30 @@ const List<String> kProfileBadges = [
   'Collector',
 ];
 
+/// Price baseline for one wishlisted product, stored on the user doc at
+/// `wishlistPrices.<productId>`. [lastSeenPrice] is what the next check
+/// compares against; [previousPrice] is the price before the last detected
+/// change, kept so the Wishlist can badge it until the fan opens the product.
+class WishlistPrice {
+  final double lastSeenPrice;
+  final double? previousPrice;
+  const WishlistPrice(this.lastSeenPrice, [this.previousPrice]);
+
+  static Map<String, WishlistPrice> parseAll(Object? raw) {
+    if (raw is! Map) return const {};
+    final out = <String, WishlistPrice>{};
+    raw.forEach((id, v) {
+      if (v is Map && v['lastSeenPrice'] is num) {
+        out['$id'] = WishlistPrice(
+          (v['lastSeenPrice'] as num).toDouble(),
+          (v['previousPrice'] as num?)?.toDouble(),
+        );
+      }
+    });
+    return out;
+  }
+}
+
 class UserData {
   final String uid;
   final String name;
@@ -25,6 +49,8 @@ class UserData {
   final String badge; // '' = none selected (pre-onboarding-feature accounts)
   final List<String> bookmarkedPostIds;
   final List<String> wishlistedProductIds;
+  // productId -> price baselines for wishlist price-change alerts.
+  final Map<String, WishlistPrice> wishlistPrices;
 
   const UserData({
     required this.uid,
@@ -40,6 +66,7 @@ class UserData {
     this.badge = '',
     this.bookmarkedPostIds = const [],
     this.wishlistedProductIds = const [],
+    this.wishlistPrices = const {},
   });
 
   bool get isAdmin => role == 'admin';
@@ -63,9 +90,12 @@ class UserData {
       bookmarkedPostIds: List<String>.from(map['bookmarkedPostIds'] ?? []),
       wishlistedProductIds:
           List<String>.from(map['wishlistedProductIds'] ?? []),
+      wishlistPrices: WishlistPrice.parseAll(map['wishlistPrices']),
     );
   }
 
+  // wishlistPrices is deliberately NOT here: it's only written by targeted
+  // field-path updates, so a full-profile update can't reset baselines.
   Map<String, dynamic> toMap() => {
         'name': name,
         'email': email,
@@ -89,6 +119,7 @@ class UserData {
     String? badge,
     List<String>? bookmarkedPostIds,
     List<String>? wishlistedProductIds,
+    Map<String, WishlistPrice>? wishlistPrices,
   }) =>
       UserData(
         uid: uid,
@@ -104,6 +135,7 @@ class UserData {
         badge: badge ?? this.badge,
         bookmarkedPostIds: bookmarkedPostIds ?? this.bookmarkedPostIds,
         wishlistedProductIds: wishlistedProductIds ?? this.wishlistedProductIds,
+        wishlistPrices: wishlistPrices ?? this.wishlistPrices,
       );
 }
 

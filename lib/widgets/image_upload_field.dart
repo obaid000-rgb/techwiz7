@@ -68,7 +68,8 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
       if (!mounted) return;
       setState(() {
         _uploading = false;
-        _error = e.toString();
+        debugPrint('Image upload failed: $e');
+        _error = 'Upload failed';
       });
     }
   }

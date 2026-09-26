@@ -65,10 +65,11 @@ class _OnboardingSlideFormScreenState extends State<OnboardingSlideFormScreen> {
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
+      debugPrint('Save failed: $e');
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = e.toString();
+          _error = 'Could not save. Check your connection and try again.';
         });
       }
     }

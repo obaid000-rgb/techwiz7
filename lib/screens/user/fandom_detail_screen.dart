@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../../models/post.dart';
+import '../../services/auth_service.dart';
 import '../../services/offline_service.dart';
+import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/youtube_utils.dart';
 
@@ -23,6 +26,14 @@ class _FandomDetailScreenState extends State<FandomDetailScreen> {
   @override
   void initState() {
     super.initState();
+    // Trending Today: count this view (signed-in fans only — the security
+    // rules only let signed-in users touch the view fields). Fire-and-forget;
+    // a failed count must never affect reading the post.
+    if (AuthService.instance.isLoggedIn) {
+      PostService.instance.recordView(widget.post.id).catchError((Object e) {
+        if (kDebugMode) debugPrint('[Trending] recordView failed: $e');
+      });
+    }
     OfflineService.instance.isSaved(widget.post.id).then((saved) {
       if (mounted) setState(() => _isSavedOffline = saved);
     });

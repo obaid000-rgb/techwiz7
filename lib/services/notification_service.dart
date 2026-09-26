@@ -10,6 +10,7 @@ import 'first_run_service.dart';
 
 const String kAnnouncementsTopic = 'announcements';
 const String kAnnouncementsChannelId = 'announcements';
+const String kPriceAlertsChannelId = 'price_alerts';
 
 /// Push is only wired up for Android (and iOS if it's ever added). Web needs a
 /// service worker + VAPID key and doesn't support topics; Windows has no FCM.
@@ -86,30 +87,7 @@ class NotificationService {
     if (!pushSupported || _initialized) return;
     _initialized = true;
 
-    await _local.initialize(
-      settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@drawable/ic_notification'),
-        iOS: DarwinInitializationSettings(
-          requestAlertPermission: false,
-          requestBadgePermission: false,
-          requestSoundPermission: false,
-        ),
-      ),
-      onDidReceiveNotificationResponse: (_) => openNotificationsScreen(),
-    );
-
-    // Android 8+ needs the channel to exist before anything can post to it.
-    // Its id matches default_notification_channel_id in AndroidManifest.xml,
-    // so background/terminated FCM notifications land in it too.
-    await _local
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(const AndroidNotificationChannel(
-          kAnnouncementsChannelId,
-          'Announcements',
-          description: 'News and announcements from Fandom Verse',
-          importance: Importance.high,
-        ));
+    await _initLocal();
 
     FirebaseMessaging.instance
         .subscribeToTopic(kAnnouncementsTopic)
@@ -141,6 +119,50 @@ class NotificationService {
     });
   }
 
+  Future<void>? _localReady;
+
+  /// Local-notification setup only (plugin + channels) — no FCM. Shared by
+  /// [init] and on-device alerts, so price alerts never depend on FCM.
+  Future<void> _initLocal() => _localReady ??= _doInitLocal();
+
+  Future<void> _doInitLocal() async {
+    await _local.initialize(
+      settings: const InitializationSettings(
+        android: AndroidInitializationSettings('@drawable/ic_notification'),
+        iOS: DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestBadgePermission: false,
+          requestSoundPermission: false,
+        ),
+      ),
+      onDidReceiveNotificationResponse: (_) => openNotificationsScreen(),
+    );
+
+    // Android 8+ needs the channel to exist before anything can post to it.
+    // Its id matches default_notification_channel_id in AndroidManifest.xml,
+    // so background/terminated FCM notifications land in it too.
+    await _local
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(const AndroidNotificationChannel(
+          kAnnouncementsChannelId,
+          'Announcements',
+          description: 'News and announcements from Fandom Verse',
+          importance: Importance.high,
+        ));
+    // Separate channel for on-device wishlist price alerts, so fans can mute
+    // them independently of announcements in system settings.
+    await _local
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(const AndroidNotificationChannel(
+          kPriceAlertsChannelId,
+          'Price alerts',
+          description: 'Price changes on items in your wishlist',
+          importance: Importance.high,
+        ));
+  }
+
   /// True if the app was cold-started by tapping a notification.
   Future<bool> launchedFromNotification() async {
     if (!pushSupported) return false;
@@ -159,7 +181,54 @@ class NotificationService {
     );
   }
 
+  /// Posts an on-device notification for a wishlist price change — purely
+  /// local (flutter_local_notifications), no FCM involved. Also recorded in
+  /// the in-app notification history. [productId] keys the notification so
+  /// each product gets its own entry (and a newer change for the same
+  /// product replaces the older one instead of stacking).
+  Future<void> showPriceAlert({
+    required String productId,
+    required String title,
+    required String body,
+  }) async {
+    // History is best-effort: a storage hiccup must not block the alert.
+    try {
+      await saveLocal(
+        id: 'price-$productId-${DateTime.now().millisecondsSinceEpoch}',
+        title: title,
+        body: body,
+      );
+    } catch (e) {
+      debugPrint('Price alert history save failed: $e');
+    }
+    if (!pushSupported) return;
+    await _initLocal();
+    await _local.show(
+      id: productId.hashCode & 0x7fffffff,
+      title: title,
+      body: body,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          kPriceAlertsChannelId,
+          'Price alerts',
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@drawable/ic_notification',
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+    );
+  }
+
   // ── History ──────────────────────────────────────────────────────────────
+
+  Future<void> saveLocal({required String id, required String title, required String body}) async {
+    final box = await _box();
+    await box.put(
+      id,
+      AppNotification(id: id, title: title, body: body, receivedAt: DateTime.now()).toMap(),
+    );
+  }
 
   Future<void> saveMessage(RemoteMessage message) async {
     final id = message.messageId ??

@@ -7,6 +7,7 @@ import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/category_icons.dart';
 import '../../utils/youtube_utils.dart';
+import '../../widgets/trending_badge.dart';
 import 'fandom_detail_screen.dart';
 
 const String _kArtwork = 'assets/images/onboarding/onboarding_bg.jpg';
@@ -531,6 +532,7 @@ class _DeepDiveCard extends StatelessWidget {
               ),
             ),
           ),
+          Positioned(top: 12, right: 12, child: TrendingBadge(postId: post.id)),
           Positioned(
             left: 16,
             right: 16,
@@ -567,6 +569,7 @@ class _DeepDiveCard extends StatelessWidget {
               children: [
                 _media(image, color),
                 Positioned(left: 10, bottom: 10, right: 10, child: _badges(color)),
+                Positioned(top: 8, right: 8, child: TrendingBadge(postId: post.id)),
               ],
             ),
           ),

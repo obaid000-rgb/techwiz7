@@ -21,7 +21,7 @@ class OfflineDownloadsScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Downloads', style: AppTheme.orbitron(size: 13)),
+        title: Text('Offline Downloads', style: AppTheme.orbitron(size: 13)),
       ),
       body: FutureBuilder<ValueListenable<Box>>(
         future: OfflineService.instance.listenable(),
@@ -51,7 +51,7 @@ class OfflineDownloadsScreen extends StatelessWidget {
                           style: AppTheme.orbitron(
                               size: 12, color: Colors.grey, weight: FontWeight.w600)),
                       const SizedBox(height: 4),
-                      Text('Save a post for offline from its detail page.',
+                      Text('Save a post for offline from its detail page. Downloads are full copies kept on this device and work without internet.',
                           style: AppTheme.inter(size: 11, color: Colors.grey)),
                     ],
                   ),

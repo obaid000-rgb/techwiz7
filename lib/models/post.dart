@@ -28,6 +28,11 @@ class Post {
   final String? youtubeUrl;
   final String contentDepth; // '' | 'beginner' | 'deep'
   final String deepDiveType; // '' | 'trivia' | 'lore' | 'interview'
+  // Daily view tracking for the "Trending Today" badge. Written only by
+  // PostService.recordView's transaction — deliberately left out of toMap()
+  // so admin edits (update(toMap())) never reset or roll back the counts.
+  final int todayViewCount;
+  final String todayViewDate; // local date "yyyy-MM-dd", '' = never viewed
 
   const Post({
     required this.id,
@@ -42,6 +47,8 @@ class Post {
     this.youtubeUrl,
     this.contentDepth = '',
     this.deepDiveType = '',
+    this.todayViewCount = 0,
+    this.todayViewDate = '',
   });
 
   bool get isActive => status == 'active';
@@ -67,6 +74,8 @@ class Post {
         deepDiveType: kDeepDiveTypes.contains(map['deepDiveType'])
             ? map['deepDiveType'] as String
             : '',
+        todayViewCount: (map['todayViewCount'] as num?)?.toInt() ?? 0,
+        todayViewDate: map['todayViewDate'] as String? ?? '',
       );
 
   Map<String, dynamic> toMap() => {
@@ -109,5 +118,7 @@ class Post {
         youtubeUrl: clearYoutubeUrl ? null : (youtubeUrl ?? this.youtubeUrl),
         contentDepth: contentDepth ?? this.contentDepth,
         deepDiveType: deepDiveType ?? this.deepDiveType,
+        todayViewCount: todayViewCount,
+        todayViewDate: todayViewDate,
       );
 }

@@ -289,7 +289,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
                   Text('Today\'s Fandom',
                       style: AppTheme.inter(
                           size: 13, color: Colors.white, weight: FontWeight.w600)),
-                  Text('Featured as the single highlight on Explore',
+                  Text('Featured as the single highlight on the Lore tab',
                       style: AppTheme.inter(size: 10, color: Colors.grey)),
                 ],
               ),
@@ -385,10 +385,11 @@ class _PostFormScreenState extends State<PostFormScreen> {
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
+      debugPrint('Save failed: $e');
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = 'Save failed: $e';
+          _error = 'Could not save. Check your connection and try again.';
         });
       }
     }

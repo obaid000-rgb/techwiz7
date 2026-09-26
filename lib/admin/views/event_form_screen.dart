@@ -277,10 +277,11 @@ class _EventFormScreenState extends State<EventFormScreen> {
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
+      debugPrint('Save failed: $e');
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = 'Save failed: $e';
+          _error = 'Could not save. Check your connection and try again.';
         });
       }
     }

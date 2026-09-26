@@ -17,8 +17,9 @@ class OnboardingSlideManagementScreen extends StatelessWidget {
               child: CircularProgressIndicator(color: AppTheme.pink));
         }
         if (snapshot.hasError) {
+          debugPrint('Onboarding slides load error: ${snapshot.error}');
           return Center(
-              child: Text('Error: ${snapshot.error}',
+              child: Text('Could not load onboarding slides. Check your connection and try again.',
                   style: AppTheme.inter(color: Colors.red)));
         }
         final slides = List<OnboardingSlide>.from(snapshot.data ?? [])

@@ -1,12 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:hive_ce_flutter/hive_flutter.dart';
 import '../../models/app_category.dart';
 import '../../services/auth_service.dart';
 import '../../services/category_service.dart';
+import '../../services/offline_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/guest_prompt.dart';
-import '../../widgets/image_upload_field.dart';
 import '../../widgets/my_fandoms_card.dart';
+import 'edit_profile_screen.dart';
 import 'notifications_screen.dart';
 import 'offline_downloads_screen.dart';
 import 'purchase_history_screen.dart';
@@ -38,6 +41,7 @@ class _ProfileContent extends StatefulWidget {
 }
 
 class _ProfileContentState extends State<_ProfileContent> {
+  late final Future<ValueListenable<Box>> _offlineBox = OfflineService.instance.listenable();
   late final Stream<List<AppCategory>> _categories =
       CategoryService.instance.watchCategories();
 
@@ -60,81 +64,6 @@ class _ProfileContentState extends State<_ProfileContent> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failMessage)));
       }
     }
-  }
-
-  Future<void> _onAvatarUploaded(String url) {
-    final previous = widget.user.avatarUrl;
-    return _saveField(
-      (u) => u.copyWith(avatarUrl: url),
-      (u) => u.copyWith(avatarUrl: previous),
-      (uid) => UserService.instance.setAvatarUrl(uid, url),
-      'Could not save your new avatar. Try again.',
-    );
-  }
-
-  Future<void> _editBio() async {
-    final ctrl = TextEditingController(text: widget.user.bio);
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 16,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Edit Bio', style: AppTheme.orbitron(size: 13)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              maxLines: 3,
-              maxLength: 160,
-              style: AppTheme.inter(size: 13, color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Tell other fans a bit about yourself…',
-                filled: true,
-                fillColor: AppTheme.bg,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppTheme.border)),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.cyan,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ),
-                child: Text('SAVE',
-                    style: AppTheme.orbitron(size: 10, color: Colors.black)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (result == null || result == widget.user.bio) return;
-    final previous = widget.user.bio;
-    await _saveField(
-      (u) => u.copyWith(bio: result),
-      (u) => u.copyWith(bio: previous),
-      (uid) => UserService.instance.setBio(uid, result),
-      'Could not save your bio. Try again.',
-    );
   }
 
   Future<void> _editFandoms(List<AppCategory> allCategories) async {
@@ -239,12 +168,22 @@ class _ProfileContentState extends State<_ProfileContent> {
       child: Column(
         children: [
           const SizedBox(height: 20),
-          ImageUploadField(
-            initialUrl: user.avatarUrl.isEmpty ? null : user.avatarUrl,
-            onUploaded: _onAvatarUploaded,
-            accentColor: AppTheme.cyan,
-            isCircular: true,
-            circleRadius: 46,
+          // Display only — changed from Edit Profile.
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(colors: [AppTheme.cyan, AppTheme.accent]),
+            ),
+            child: CircleAvatar(
+              radius: 46,
+              backgroundColor: AppTheme.card,
+              backgroundImage: user.avatarUrl.isNotEmpty ? NetworkImage(user.avatarUrl) : null,
+              child: user.avatarUrl.isEmpty
+                  ? Text(user.name.isEmpty ? '?' : user.name[0].toUpperCase(),
+                      style: AppTheme.orbitron(size: 30, weight: FontWeight.w900))
+                  : null,
+            ),
           ),
           const SizedBox(height: 14),
           Text(user.name,
@@ -273,33 +212,41 @@ class _ProfileContentState extends State<_ProfileContent> {
           ],
           const SizedBox(height: 18),
 
-          // Bio
-          GestureDetector(
-            onTap: _editBio,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppTheme.card,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.border),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => EditProfileScreen(user: user)),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      user.bio.isEmpty ? 'Add a bio…' : user.bio,
-                      style: AppTheme.inter(
-                        size: 12,
-                        color: user.bio.isEmpty ? Colors.grey : Colors.white70,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.edit_outlined, color: Colors.grey, size: 15),
-                ],
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppTheme.border),
+                backgroundColor: AppTheme.card,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.edit_rounded, color: AppTheme.cyan, size: 16),
+              label: Text('Edit Profile',
+                  style: AppTheme.inter(size: 13, color: Colors.white, weight: FontWeight.w600)),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Bio — read-only here; edited from Edit Profile.
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.card,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: Text(
+              user.bio.isEmpty ? 'No bio yet.' : user.bio,
+              style: AppTheme.inter(
+                size: 12,
+                color: user.bio.isEmpty ? Colors.grey : Colors.white70,
+                height: 1.4,
               ),
             ),
           ),
@@ -309,62 +256,80 @@ class _ProfileContentState extends State<_ProfileContent> {
 
           // Stats row
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+            padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
               color: AppTheme.card,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppTheme.border),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _stat('${user.bookmarkedPostIds.length}', 'Saved'),
-                Container(width: 1, height: 28, color: AppTheme.border),
-                _stat('${user.savedEvents}', 'Events'),
-                Container(width: 1, height: 28, color: AppTheme.border),
-                _stat(user.rank, 'Rank'),
+                Expanded(child: _stat('${user.bookmarkedPostIds.length}', 'Bookmarks')),
+                Container(width: 1, height: 32, color: AppTheme.border),
+                Expanded(child: _stat('${user.savedEvents}', 'Events')),
+                Container(width: 1, height: 32, color: AppTheme.border),
+                Expanded(child: _stat(user.rank, 'Fan rank')),
               ],
             ),
           ),
           const SizedBox(height: 24),
 
-          _menuTile(
-            Icons.bookmark_outline,
-            'Saved Bookmarks',
-            () => Navigator.push(
+          _groupLabel('YOUR LIBRARY'),
+          _libraryTile(
+            icon: Icons.bookmark_rounded,
+            color: AppTheme.cyan,
+            title: 'Bookmarks',
+            count: user.bookmarkedPostIds.length,
+            description: 'Quick links to posts you want to find again.',
+            badgeIcon: Icons.wifi,
+            badge: 'Needs internet',
+            onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const SavedBookmarksScreen()),
             ),
-            subtitle: 'Synced to your account · needs internet',
           ),
-          _menuTile(
-            Icons.receipt_long_outlined,
-            'Purchase History',
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => PurchaseHistoryScreen(uid: user.uid)),
+          FutureBuilder<ValueListenable<Box>>(
+            future: _offlineBox,
+            builder: (context, snap) => snap.hasData
+                ? ValueListenableBuilder<Box>(
+                    valueListenable: snap.data!,
+                    builder: (context, box, _) => _offlineTile(box.length),
+                  )
+                : _offlineTile(0),
+          ),
+          const SizedBox(height: 14),
+
+          _groupLabel('ACCOUNT'),
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: AppTheme.card,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: Column(
+              children: [
+                _menuTile(
+                  Icons.receipt_long_outlined,
+                  'Purchase history',
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => PurchaseHistoryScreen(uid: user.uid)),
+                  ),
+                ),
+                const Divider(height: 1, color: AppTheme.border),
+                _menuTile(
+                  Icons.notifications_none,
+                  'Notifications',
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                  ),
+                ),
+              ],
             ),
           ),
-          _menuTile(
-            Icons.download_for_offline_outlined,
-            'Offline Downloads',
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const OfflineDownloadsScreen()),
-            ),
-            subtitle: 'Saved on this device · works without internet',
-          ),
-          _menuTile(
-            Icons.notifications_none,
-            'Push Notifications',
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-            ),
-          ),
-          _menuTile(Icons.security, 'Account Security', () {}),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
 
           // Logout — calls signOut() only; top bar and this screen update via ValueListenableBuilder
           SizedBox(
@@ -390,30 +355,108 @@ class _ProfileContentState extends State<_ProfileContent> {
   Widget _stat(String val, String label) {
     return Column(
       children: [
-        Text(val, style: AppTheme.orbitron(size: 14, color: AppTheme.cyan, weight: FontWeight.w700)),
-        const SizedBox(height: 2),
-        Text(label, style: AppTheme.inter(size: 10, color: Colors.grey)),
+        Text(val, style: AppTheme.orbitron(size: 17, color: AppTheme.cyan, weight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        Text(label, style: AppTheme.inter(size: 12, color: AppTheme.textMuted)),
       ],
     );
   }
 
-  Widget _menuTile(IconData icon, String title, VoidCallback onTap, {String? subtitle}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: AppTheme.cyan, size: 20),
-        title: Text(title, style: AppTheme.inter(size: 13)),
-        subtitle: subtitle == null
-            ? null
-            : Text(subtitle, style: AppTheme.inter(size: 10, color: Colors.grey)),
-        trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 14),
-        onTap: onTap,
-      ),
+  Widget _offlineTile(int n) => _libraryTile(icon: Icons.download_for_offline_rounded,
+              color: AppTheme.accent,
+              title: 'Offline Downloads',
+              count: n,
+              description: 'Full copies saved to this phone.',
+              badgeIcon: Icons.wifi_off,
+              badge: 'Works without internet',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const OfflineDownloadsScreen()),
+              ),
+      );
+
+  Widget _groupLabel(String text) => Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 10, left: 2),
+          child: Text(text,
+              style: AppTheme.orbitron(size: 12, color: AppTheme.textSecondary, letterSpacing: 1)),
+        ),
+      );
+
+  Widget _libraryTile({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required int count,
+    required String description,
+    required IconData badgeIcon,
+    required String badge,
+    required VoidCallback onTap,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Material(
+          color: AppTheme.card,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.border),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, color: color, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Text(title, style: AppTheme.inter(size: 15, weight: FontWeight.w600)),
+                          const SizedBox(width: 8),
+                          Text('$count',
+                              style: AppTheme.inter(size: 12, weight: FontWeight.w600, color: AppTheme.textMuted)),
+                        ]),
+                        const SizedBox(height: 4),
+                        Text(description,
+                            style: AppTheme.inter(size: 12, color: AppTheme.textSecondary, height: 1.4)),
+                        const SizedBox(height: 6),
+                        Row(children: [
+                          Icon(badgeIcon, color: color, size: 14),
+                          const SizedBox(width: 4),
+                          Text(badge, style: AppTheme.inter(size: 11, weight: FontWeight.w600, color: color)),
+                        ]),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Widget _menuTile(IconData icon, String title, VoidCallback onTap) {
+    return ListTile(
+      minTileHeight: 56,
+      leading: Icon(icon, color: AppTheme.cyan, size: 22),
+      title: Text(title, style: AppTheme.inter(size: 14, weight: FontWeight.w500)),
+      trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
+      onTap: onTap,
     );
   }
 }

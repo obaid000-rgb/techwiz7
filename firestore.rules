@@ -60,6 +60,23 @@ service cloud.firestore {
     match /posts/{docId} {
       allow read: if true;
       allow write: if isAdmin();
+      // Trending Today: any signed-in user may count one view. Only the two
+      // view fields may change, and only as +1 on the same day or a reset to
+      // 1 with a new date — so nobody can inflate a count by a large jump or
+      // edit the post itself.
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['todayViewCount', 'todayViewDate'])
+        && request.resource.data.todayViewDate is string
+        && request.resource.data.todayViewDate.size() == 10
+        && request.resource.data.todayViewCount is int
+        && (
+             (request.resource.data.todayViewDate == resource.data.get('todayViewDate', '')
+               && request.resource.data.todayViewCount
+                    == resource.data.get('todayViewCount', 0) + 1)
+             || (request.resource.data.todayViewDate != resource.data.get('todayViewDate', '')
+               && request.resource.data.todayViewCount == 1)
+           );
     }
 
     match /merchandise/{docId} {
