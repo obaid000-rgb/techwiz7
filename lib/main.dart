@@ -3,7 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'firebase_options.dart';
-import 'screens/splash_screen.dart';
+import 'screens/splash/splash_screen.dart';
 import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 

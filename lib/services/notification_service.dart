@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
-import '../screens/user/notifications_screen.dart';
+import '../screens/notifications/notifications_screen.dart';
 import '../theme/app_theme.dart';
 import 'first_run_service.dart';
 

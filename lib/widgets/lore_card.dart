@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../models/post.dart';
-import '../screens/user/fandom_detail_screen.dart';
+import '../screens/explore/fandom_detail_screen.dart';
 import '../theme/app_theme.dart';
 import '../utils/youtube_utils.dart';
 import 'trending_badge.dart';
