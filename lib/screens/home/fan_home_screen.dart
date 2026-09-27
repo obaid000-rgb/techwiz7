@@ -21,13 +21,24 @@ class FanHomeScreen extends StatefulWidget {
   State<FanHomeScreen> createState() => _FanHomeScreenState();
 }
 
-class _FanHomeScreenState extends State<FanHomeScreen> {
+class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  late AnimationController _glowController;
+
+  @override
+  void initState() {
+    super.initState();
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    )..repeat(reverse: true);
+  }
 
   @override
   void dispose() {
+    _glowController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -45,233 +56,392 @@ class _FanHomeScreenState extends State<FanHomeScreen> {
   }
 
   PreferredSizeWidget _buildAppBar() {
+    final double appBarHeight = _currentIndex == 0 ? 130 : 75;
     return PreferredSize(
-      preferredSize: Size.fromHeight(_currentIndex == 0 ? 120 : 68),
-      // BackdropFilter creates the glass/blur effect; content behind shows through
-      child: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF151725).withValues(alpha: 0.75),
-              border: Border(
-                bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-              ),
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Column(
+      preferredSize: Size.fromHeight(appBarHeight),
+      child: Stack(
+        children: [
+          // ── 1. Animated Ambient Glow ────────────────────────────────
+          AnimatedBuilder(
+            animation: _glowController,
+            builder: (context, child) {
+              return Stack(
                 children: [
-                  // ── Logo row ──────────────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                    child: Row(
-                      children: [
-                        // 32×32 rounded-square logo, purple→cyan diagonal gradient
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            gradient: const LinearGradient(
-                              colors: [AppTheme.accent, AppTheme.cyan],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
+                  Positioned(
+                    top: -40,
+                    left: 20 + (20 * _glowController.value),
+                    child: Container(
+                      width: 150,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.accent.withValues(alpha: 0.15 * _glowController.value),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.accent.withValues(alpha: 0.2),
+                            blurRadius: 60,
+                            spreadRadius: 20,
                           ),
-                          child: Center(
-                            child: Text(
-                              'F',
-                              style: GoogleFonts.orbitron(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 18,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        // Wordmark + caption
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // ShaderMask applies a horizontal gradient over the text color
-                            ShaderMask(
-                              shaderCallback: (bounds) => const LinearGradient(
-                                colors: [AppTheme.cyan, AppTheme.accent, AppTheme.pink],
-                              ).createShader(bounds),
-                              child: Text(
-                                'FANDOM VERSE',
-                                style: GoogleFonts.orbitron(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 13,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              'POCKET EDITION',
-                              style: GoogleFonts.orbitron(
-                                color: Colors.blueGrey,
-                                fontSize: 7,
-                                letterSpacing: 1.8,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        // Auth-aware right side: guest shows Log In + Register;
-                        // signed-in shows the role badge (the profile lives in the Profile tab)
-                        ValueListenableBuilder<UserData?>(
-                          valueListenable: AuthService.instance.userNotifier,
-                          builder: (context, user, _) {
-                            if (user == null) {
-                              return Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  TextButton(
-                                    onPressed: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                                    ),
-                                    style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    ),
-                                    child: Text('Log In',
-                                        style: AppTheme.inter(size: 12, weight: FontWeight.w600)),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  GestureDetector(
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (_) => const SignupScreen()),
-                                    ),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(20),
-                                        gradient: const LinearGradient(
-                                          colors: [AppTheme.accent, AppTheme.cyan],
-                                        ),
-                                      ),
-                                      child: Text('Register',
-                                          style: AppTheme.inter(
-                                              size: 11, weight: FontWeight.w700)),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }
-                            // Signed-in: role badge + optional admin button
-                            final isAdmin = user.role == 'admin';
-                            final badgeColor = isAdmin ? AppTheme.orange : AppTheme.cyan;
-                            return Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Role badge — shows ADMIN (orange) or FAN (cyan)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.card,
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                        color: isAdmin
-                                            ? AppTheme.orange.withValues(alpha: 0.6)
-                                            : AppTheme.border),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.shield_outlined, color: badgeColor, size: 12),
-                                      const SizedBox(width: 4),
-                                      Text(isAdmin ? 'ADMIN' : 'FAN',
-                                          style: GoogleFonts.orbitron(
-                                            color: badgeColor,
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w700,
-                                            letterSpacing: 0.5,
-                                          )),
-                                    ],
-                                  ),
-                                ),
-                                // Admin panel entry — only renders for admin role
-                                if (isAdmin) ...[
-                                  const SizedBox(width: 6),
-                                  GestureDetector(
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (_) => const AdminShell()),
-                                    ),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(7),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.orange.withValues(alpha: 0.15),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                            color: AppTheme.orange.withValues(alpha: 0.5)),
-                                      ),
-                                      child: const Icon(Icons.admin_panel_settings,
-                                          color: AppTheme.orange, size: 16),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            );
-                          },
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                  // ── Search bar (Home only — it filters Home's posts) ──
-                  if (_currentIndex == 0)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-                    child: SizedBox(
-                      height: 44,
-                      child: TextField(
-                        controller: _searchController,
-                        style: AppTheme.inter(color: Colors.white, size: 14),
-                        onChanged: (val) => setState(() => _searchQuery = val),
-                        decoration: InputDecoration(
-                          hintText: 'Search posts on Home',
-                          hintStyle: AppTheme.inter(color: AppTheme.textMuted, size: 14),
-                          prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 18),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.close, color: Colors.grey, size: 16),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() => _searchQuery = '');
-                                  },
-                                )
-                              : null,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-                          filled: true,
-                          fillColor: AppTheme.card.withValues(alpha: 0.8),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: const BorderSide(color: AppTheme.border),
+                  Positioned(
+                    top: -40,
+                    right: 20 + (20 * (1 - _glowController.value)),
+                    child: Container(
+                      width: 150,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.cyan.withValues(alpha: 0.15 * (1 - _glowController.value)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.cyan.withValues(alpha: 0.2),
+                            blurRadius: 60,
+                            spreadRadius: 20,
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: const BorderSide(color: AppTheme.border),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: const BorderSide(color: AppTheme.cyan, width: 1.5),
-                          ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
                 ],
+              );
+            },
+          ),
+
+          // ── 2. The Glass Header Surface ────────────────────────────
+          ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D0E15).withValues(alpha: 0.7),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      width: 0.5,
+                    ),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  bottom: false,
+                  child: Column(
+                    children: [
+                      // Logo Row
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                        child: Row(
+                          children: [
+                            // Premium Sharp Logo
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                gradient: const LinearGradient(
+                                  colors: [AppTheme.accent, AppTheme.cyan],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.accent.withValues(alpha: 0.4),
+                                    blurRadius: 10,
+                                    spreadRadius: -2,
+                                  ),
+                                  const BoxShadow(
+                                    color: Colors.white24,
+                                    offset: Offset(1, 1),
+                                    blurRadius: 1,
+                                    // inset: true,
+                                  ),
+                                ],
+                              ),
+                              child: Center(
+                                child: Text(
+                                  'F',
+                                  style: GoogleFonts.orbitron(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 20,
+                                    shadows: [
+                                      const Shadow(color: Colors.black26, offset: Offset(0, 2), blurRadius: 4),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            // Branding
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ShaderMask(
+                                  shaderCallback: (bounds) => const LinearGradient(
+                                    colors: [Colors.white, AppTheme.cyan, AppTheme.accent],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ).createShader(bounds),
+                                  child: Text(
+                                    'FANDOM VERSE',
+                                    style: GoogleFonts.orbitron(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 15,
+                                      letterSpacing: 2.0,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  margin: const EdgeInsets.only(top: 2),
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.05),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                  child: Text(
+                                    'POCKET EDITION',
+                                    style: GoogleFonts.orbitron(
+                                      color: AppTheme.textMuted,
+                                      fontSize: 7.5,
+                                      letterSpacing: 2.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Spacer(),
+                            // Auth/User Controls
+                            ValueListenableBuilder<UserData?>(
+                              valueListenable: AuthService.instance.userNotifier,
+                              builder: (context, user, _) {
+                                if (user == null) {
+                                  return Row(
+                                    children: [
+                                      _buildPremiumButton(
+                                        label: 'LOG IN',
+                                        onTap: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                        ),
+                                        isPrimary: false,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      _buildPremiumButton(
+                                        label: 'JOIN',
+                                        onTap: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (_) => const SignupScreen()),
+                                        ),
+                                        isPrimary: true,
+                                      ),
+                                    ],
+                                  );
+                                }
+                                final isAdmin = user.role == 'admin';
+                                return Row(
+                                  children: [
+                                    _buildUserBadge(isAdmin ? 'ADMIN' : 'FAN', isAdmin),
+                                    if (isAdmin) ...[
+                                      const SizedBox(width: 10),
+                                      _buildGlossyIconButton(
+                                        icon: Icons.admin_panel_settings_rounded,
+                                        color: AppTheme.orange,
+                                        onTap: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (_) => const AdminShell()),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Search Bar (Home Only)
+                      if (_currentIndex == 0)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                          child: _buildPremiumSearchBar(),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPremiumButton({required String label, required VoidCallback onTap, required bool isPrimary}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: isPrimary
+                ? const LinearGradient(
+                    colors: [AppTheme.accent, AppTheme.cyan],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: isPrimary ? null : Colors.white.withValues(alpha: 0.08),
+            border: Border.all(
+              color: isPrimary ? Colors.white.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.1),
+              width: 1,
+            ),
+            boxShadow: isPrimary
+                ? [
+                    BoxShadow(
+                      color: AppTheme.accent.withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.orbitron(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserBadge(String label, bool isAdmin) {
+    final color = isAdmin ? AppTheme.orange : AppTheme.cyan;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.05),
+            blurRadius: 4,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(isAdmin ? Icons.shield_rounded : Icons.person_rounded, color: color, size: 14),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: GoogleFonts.orbitron(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGlossyIconButton({required IconData icon, required Color color, required VoidCallback onTap}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.4), width: 1),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withValues(alpha: 0.1),
+                Colors.transparent,
+              ],
+            ),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumSearchBar() {
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.02),
+            offset: const Offset(0, -1),
+            blurRadius: 0,
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (val) => setState(() => _searchQuery = val),
+        style: AppTheme.inter(color: Colors.white, size: 14),
+        decoration: InputDecoration(
+          hintText: 'Search the Fandom Verse...',
+          hintStyle: AppTheme.inter(color: AppTheme.textMuted.withValues(alpha: 0.6), size: 14),
+          prefixIcon: Icon(Icons.search_rounded, color: AppTheme.cyan.withValues(alpha: 0.7), size: 20),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 18),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          filled: false,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
         ),
       ),
     );
@@ -282,9 +452,6 @@ class _FanHomeScreenState extends State<FanHomeScreen> {
     return ValueListenableBuilder<UserData?>(
       valueListenable: AuthService.instance.userNotifier,
       builder: (context, user, _) {
-        // Safety net: any signed-in account with no saved categories (e.g.
-        // pre-migration accounts, or registered with no pending pre-login
-        // selection on this device) picks interests + badge here.
         if (user != null && !user.hasOnboarded) {
           return OnboardingScreen(user: user);
         }
@@ -303,6 +470,7 @@ class _FanHomeScreenState extends State<FanHomeScreen> {
     ];
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: _buildAppBar(),
       body: IndexedStack(index: _currentIndex, children: tabs),
       floatingActionButton: _currentIndex == 0
@@ -314,13 +482,20 @@ class _FanHomeScreenState extends State<FanHomeScreen> {
               child: Container(
                 width: 56,
                 height: 56,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(
+                  gradient: const LinearGradient(
                     colors: [AppTheme.cyan, AppTheme.accent],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.cyan.withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: const Icon(Icons.smart_toy_outlined, color: Colors.white, size: 26),
               ),
@@ -358,9 +533,6 @@ class _FanHomeScreenState extends State<FanHomeScreen> {
   }
 }
 
-/// The AI Assistant sheet: same header and input as before, now with a real
-/// conversation. The session lives in [AiAssistantService] for as long as the
-/// app is open, so closing and reopening the sheet keeps the chat.
 class _AiAssistantSheet extends StatefulWidget {
   const _AiAssistantSheet();
 
@@ -422,8 +594,6 @@ class _AiAssistantSheetState extends State<_AiAssistantSheet> {
   @override
   Widget build(BuildContext context) {
     final transcript = _service.transcript;
-    // While waiting, the question is already in the transcript; on failure
-    // it's removed again and shown in the error row with Retry instead.
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: ConstrainedBox(

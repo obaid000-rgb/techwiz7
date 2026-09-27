@@ -1,9 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'firestore_db.dart';
 
-// Fixed set offered during onboarding — no existing badge art/names were
-// found anywhere in the project, so these are new.
+// Fixed set offered during onboarding
 const List<String> kProfileBadges = [
   'Newcomer',
   'Enthusiast',
@@ -11,10 +11,6 @@ const List<String> kProfileBadges = [
   'Collector',
 ];
 
-/// Price baseline for one wishlisted product, stored on the user doc at
-/// `wishlistPrices.<productId>`. [lastSeenPrice] is what the next check
-/// compares against; [previousPrice] is the price before the last detected
-/// change, kept so the Wishlist can badge it until the fan opens the product.
 class WishlistPrice {
   final double lastSeenPrice;
   final double? previousPrice;
@@ -46,10 +42,9 @@ class UserData {
   final String role; // 'fan' | 'admin'
   final List<String> categories;
   final String bio;
-  final String badge; // '' = none selected (pre-onboarding-feature accounts)
+  final String badge;
   final List<String> bookmarkedPostIds;
   final List<String> wishlistedProductIds;
-  // productId -> price baselines for wishlist price-change alerts.
   final Map<String, WishlistPrice> wishlistPrices;
 
   const UserData({
@@ -70,8 +65,6 @@ class UserData {
   });
 
   bool get isAdmin => role == 'admin';
-
-  /// Whether this account has completed onboarding (category selection).
   bool get hasOnboarded => categories.isNotEmpty;
 
   factory UserData.fromMap(Map<String, dynamic> map, String uid) {
@@ -94,8 +87,6 @@ class UserData {
     );
   }
 
-  // wishlistPrices is deliberately NOT here: it's only written by targeted
-  // field-path updates, so a full-profile update can't reset baselines.
   Map<String, dynamic> toMap() => {
         'name': name,
         'email': email,
@@ -146,6 +137,7 @@ class AuthService {
   }
 
   final ValueNotifier<UserData?> userNotifier = ValueNotifier(null);
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   bool get isLoggedIn => userNotifier.value != null;
   UserData? get currentUser => userNotifier.value;
@@ -155,7 +147,6 @@ class AuthService {
       userNotifier.value = null;
       return;
     }
-    // Already set by register() — skip to avoid race condition
     if (userNotifier.value?.uid == firebaseUser.uid) return;
     try {
       final doc = await FirestoreDb.instance
@@ -181,7 +172,6 @@ class AuthService {
             .catchError((_) {});
       }
     } catch (_) {
-      // Firestore unavailable — fall back to Auth data so app doesn't hang
       final name = firebaseUser.displayName ??
           firebaseUser.email!.split('@').first;
       userNotifier.value = UserData(
@@ -193,19 +183,30 @@ class AuthService {
     }
   }
 
-  /// Sign in with email + password. Throws [FirebaseAuthException] on failure.
-  Future<void> signIn({
-    required String email,
-    required String password,
-  }) async {
+  Future<void> signIn({required String email, required String password}) async {
     await FirebaseAuth.instance.signInWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
-    // _onAuthStateChanged fires and reads role from Firestore
   }
 
-  /// Create account, save profile to Firestore as 'fan'. Throws [FirebaseAuthException] on failure.
+  Future<void> signInWithGoogle() async {
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return;
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      await FirebaseAuth.instance.signInWithCredential(credential);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<void> register({
     required String email,
     required String password,
@@ -221,11 +222,9 @@ class AuthService {
       uid: cred.user!.uid,
       name: displayName,
       email: email.trim(),
-      role: 'fan', // new registrations are always fans
+      role: 'fan',
     );
-    // Set immediately so UI updates and Navigator.pop() fires
     userNotifier.value = userData;
-    // Write to Firestore in background
     FirestoreDb.instance
         .collection('users')
         .doc(cred.user!.uid)
@@ -234,7 +233,7 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    await _googleSignIn.signOut();
     await FirebaseAuth.instance.signOut();
-    // _onAuthStateChanged fires and sets userNotifier to null
   }
 }

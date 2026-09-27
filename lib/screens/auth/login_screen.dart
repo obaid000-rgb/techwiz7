@@ -43,6 +43,23 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _loginWithGoogle() async {
+    setState(() { _loading = true; _errorMessage = null; });
+    try {
+      await AuthService.instance.signInWithGoogle();
+      if (mounted) Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      debugPrint("Firebase Auth Google Exception: Code: ${e.code}, Message: ${e.message}");
+      setState(() { _errorMessage = _friendlyError(e.code); });
+    } catch (e, stack) {
+      debugPrint("Detailed Google Sign-In Failure Object: $e");
+      debugPrint("Stacktrace: $stack");
+      setState(() { _errorMessage = 'Google Login error details: ${e.toString().split('\n').first}'; });
+    } finally {
+      if (mounted) setState(() { _loading = false; });
+    }
+  }
+
   String _friendlyError(String code) {
     switch (code) {
       case 'user-not-found':
@@ -205,7 +222,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16)),
                         ),
-                        child: _loading
+                        child: _loading && _emailController.text.isNotEmpty
                             ? const SizedBox(
                                 height: 20,
                                 width: 20,
@@ -235,12 +252,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 16),
 
                       OutlinedButton.icon(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Google Sign-In coming soon')),
-                          );
-                        },
+                        onPressed: _loading ? null : _loginWithGoogle,
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           side: const BorderSide(color: AppTheme.border),
@@ -248,8 +260,14 @@ class _LoginScreenState extends State<LoginScreen> {
                               borderRadius: BorderRadius.circular(16)),
                           backgroundColor: AppTheme.card,
                         ),
-                        icon: const Icon(Icons.g_mobiledata,
-                            color: Colors.white, size: 24),
+                        icon: _loading && _emailController.text.isEmpty
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.g_mobiledata,
+                                color: Colors.white, size: 24),
                         label: const Text('Continue with Google',
                             style: TextStyle(
                                 color: Colors.white,
