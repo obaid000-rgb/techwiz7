@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -59,8 +61,18 @@ class WishlistPriceService {
   }
 
   /// Runs one check (concurrent callers share the same run). Never throws.
-  Future<List<WishlistPriceChange>> checkNow() =>
-      _inFlight ??= _check().whenComplete(() => _inFlight = null);
+  Future<List<WishlistPriceChange>> checkNow() {
+    final existing = _inFlight;
+    if (existing != null) return existing;
+    Future<List<WishlistPriceChange>> run() async {
+      try {
+        return await _check();
+      } finally {
+        _inFlight = null;
+      }
+    }
+    return _inFlight = run();
+  }
 
   Future<List<WishlistPriceChange>> _check() async {
     final user = AuthService.instance.currentUser;
@@ -87,8 +99,16 @@ class WishlistPriceService {
         return const [];
       }
       // Save the new baselines FIRST: if this write fails, nothing is
-      // announced and the next check retries — no duplicate alerts.
-      await UserService.instance.setWishlistPrices(user.uid, updates);
+      // announced and the next check retries — no duplicate alerts. Offline
+      // the write never completes (it's queued and synced later), so a
+      // timeout counts as saved instead of blocking this check forever.
+      try {
+        await UserService.instance
+            .setWishlistPrices(user.uid, updates)
+            .timeout(const Duration(seconds: 10));
+      } on TimeoutException {
+        _log('baseline write queued (offline?)');
+      }
       final current = AuthService.instance.currentUser;
       if (current != null && current.uid == user.uid) {
         AuthService.instance.userNotifier.value = current.copyWith(

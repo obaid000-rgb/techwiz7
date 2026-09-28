@@ -8,8 +8,8 @@ import '../../services/category_service.dart';
 import '../../services/event_service.dart';
 import '../../services/first_run_service.dart';
 import '../../services/post_service.dart';
-import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/bookmark_button.dart';
 import 'widgets/fandom_heart_button.dart';
 import '../../widgets/lore_card.dart';
 import '../../widgets/trending_badge.dart';
@@ -22,7 +22,9 @@ import '../events/widgets/event_card.dart';
 
 class HomeTab extends StatefulWidget {
   final String searchQuery;
-  const HomeTab({super.key, this.searchQuery = ''});
+  /// Clears the search box that lives in FanHomeScreen (used by "Clear filters").
+  final VoidCallback? onClearSearch;
+  const HomeTab({super.key, this.searchQuery = '', this.onClearSearch});
 
   @override
   State<HomeTab> createState() => _HomeTabState();
@@ -80,37 +82,6 @@ class _HomeTabState extends State<HomeTab> {
     AuthService.instance.userNotifier.removeListener(_onUserChanged);
     _trendingSub?.cancel();
     super.dispose();
-  }
-
-  Future<void> _toggleBookmark(String postId) async {
-    final user = AuthService.instance.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Log in to bookmark posts.')),
-      );
-      return;
-    }
-    final wasSaved = user.bookmarkedPostIds.contains(postId);
-    final ids = List<String>.from(user.bookmarkedPostIds);
-    wasSaved ? ids.remove(postId) : ids.add(postId);
-    AuthService.instance.userNotifier.value = user.copyWith(bookmarkedPostIds: ids);
-    try {
-      await UserService.instance.setBookmarked(user.uid, postId, !wasSaved);
-    } catch (e) {
-      debugPrint('Bookmark update failed: $e');
-      final current = AuthService.instance.currentUser;
-      if (current != null) {
-        final reverted = List<String>.from(current.bookmarkedPostIds);
-        wasSaved ? reverted.add(postId) : reverted.remove(postId);
-        AuthService.instance.userNotifier.value =
-            current.copyWith(bookmarkedPostIds: reverted.toSet().toList());
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not update bookmarks. Try again.')),
-        );
-      }
-    }
   }
 
   @override
@@ -457,10 +428,13 @@ class _HomeTabState extends State<HomeTab> {
           q.isNotEmpty ? 'No posts match "${widget.searchQuery.trim()}"' : 'No posts for this filter',
           'Try another fandom or reading level.',
           action: 'Clear filters',
-          onAction: () => setState(() {
-            _selectedCategory = 'all';
-            _activeDepth = 'all';
-          }),
+          onAction: () {
+            widget.onClearSearch?.call();
+            setState(() {
+              _selectedCategory = 'all';
+              _activeDepth = 'all';
+            });
+          },
         ),
       ];
     }
@@ -524,7 +498,7 @@ class _HomeTabState extends State<HomeTab> {
                     ],
                   ),
                 ),
-                _bookmarkButton(post.id),
+                BookmarkButton(post: post),
               ],
             ),
           ),
@@ -532,23 +506,6 @@ class _HomeTabState extends State<HomeTab> {
       ),
     );
   }
-
-  Widget _bookmarkButton(String postId) => ValueListenableBuilder<UserData?>(
-        valueListenable: AuthService.instance.userNotifier,
-        builder: (context, user, _) {
-          final saved = user?.bookmarkedPostIds.contains(postId) ?? false;
-          return SizedBox(
-            width: 44,
-            height: 44,
-            child: IconButton(
-              tooltip: saved ? 'Remove bookmark' : 'Bookmark',
-              onPressed: () => _toggleBookmark(postId),
-              icon: Icon(saved ? Icons.bookmark : Icons.bookmark_border,
-                  color: saved ? AppTheme.cyan : AppTheme.textSecondary, size: 22),
-            ),
-          );
-        },
-      );
 
   Widget _message(IconData icon, String title, String subtitle,
           {String? action, VoidCallback? onAction}) =>

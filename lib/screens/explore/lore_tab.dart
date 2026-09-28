@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../logic/resource_query.dart';
+import '../../models/creator.dart';
 import '../../models/post.dart';
+import '../../services/creator_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/creator_widgets.dart';
 import '../../widgets/lore_card.dart';
 import '../../widgets/trending_badge.dart';
 import 'beginner_fan_hub_screen.dart';
@@ -32,8 +35,37 @@ class _LoreTabState extends State<LoreTab> {
     _TypeInfo('Podcast', Icons.mic_none_rounded, AppTheme.accent),
   ];
 
+  late final Stream<List<Creator>> _creators = CreatorService.instance.watchActive();
+
   void _push(Widget screen) =>
       Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+
+  /// Up to 10 active creators that have posts, ranked on the device by the
+  /// total views of their posts, then by post count. Hidden when none.
+  Widget _popularCreators(List<Post> posts) => StreamBuilder<List<Creator>>(
+        stream: _creators,
+        builder: (context, snap) {
+          final creators = snap.data ?? const <Creator>[];
+          final views = <String, int>{};
+          final counts = <String, int>{};
+          for (final p in posts) {
+            if (!p.hasCreator) continue;
+            views[p.creatorId] = (views[p.creatorId] ?? 0) + p.viewCount;
+            counts[p.creatorId] = (counts[p.creatorId] ?? 0) + 1;
+          }
+          final ranked = creators.where((c) => (counts[c.id] ?? 0) > 0).toList()
+            ..sort((a, b) {
+              final v = views[b.id]!.compareTo(views[a.id]!);
+              return v != 0 ? v : counts[b.id]!.compareTo(counts[a.id]!);
+            });
+          if (ranked.isEmpty) return const SizedBox.shrink();
+          return CreatorBubbleRow(
+            title: 'POPULAR CREATORS',
+            creators: ranked.take(10).toList(),
+            padding: const EdgeInsets.only(top: 28),
+          );
+        },
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -57,13 +89,17 @@ class _LoreTabState extends State<LoreTab> {
             const SizedBox(height: 28),
             Text('WHERE DO YOU WANT TO START?', style: AppTheme.orbitron(size: 13, letterSpacing: 1)),
             const SizedBox(height: 12),
-            GridView.count(
-              crossAxisCount: 2,
+            GridView(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.15,
+              // Fixed tile height (grows with the text scale) instead of an
+              // aspect ratio, which overflowed on narrow phones.
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                mainAxisExtent: 92 + MediaQuery.textScalerOf(context).scale(70),
+              ),
               children: [
                 _tile(Icons.school_outlined, AppTheme.cyan, 'New fan?',
                     'Easy intros to start any fandom',
@@ -85,6 +121,7 @@ class _LoreTabState extends State<LoreTab> {
                         ))),
               ],
             ),
+            if (posts != null) _popularCreators(posts),
             const SizedBox(height: 28),
             Text('BROWSE BY TYPE', style: AppTheme.orbitron(size: 13, letterSpacing: 1)),
             const SizedBox(height: 12),
@@ -211,7 +248,10 @@ class _LoreTabState extends State<LoreTab> {
                   child: Icon(icon, color: color, size: 22),
                 ),
                 const Spacer(),
-                Text(title, style: AppTheme.inter(size: 14, weight: FontWeight.w700)),
+                Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.inter(size: 14, weight: FontWeight.w700)),
                 const SizedBox(height: 3),
                 Text(sub,
                     maxLines: 2,
@@ -219,7 +259,10 @@ class _LoreTabState extends State<LoreTab> {
                     style: AppTheme.inter(size: 12, color: AppTheme.textMuted, height: 1.35)),
                 if (meta.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(meta, style: AppTheme.inter(size: 11, weight: FontWeight.w600, color: color)),
+                  Text(meta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.inter(size: 11, weight: FontWeight.w600, color: color)),
                 ],
               ],
             ),

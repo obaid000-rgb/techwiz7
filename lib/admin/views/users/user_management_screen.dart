@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../services/admin_user_service.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/firestore_db.dart';
 import '../../../services/user_service.dart';
@@ -85,6 +86,7 @@ class UserManagementScreen extends StatelessWidget {
 
   Widget _userRow(BuildContext context, UserData user) {
     final isAdmin = user.role == 'admin';
+    final isSelf = user.uid == AuthService.instance.currentUser?.uid;
     final cats = user.categories.isEmpty
         ? 'No categories'
         : user.categories.join(', ');
@@ -143,6 +145,12 @@ class UserManagementScreen extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (user.disabled) ...[
+                  const SizedBox(height: 3),
+                  Text('DEACTIVATED',
+                      style: AppTheme.orbitron(
+                          size: 8, color: Colors.redAccent, weight: FontWeight.w700)),
+                ],
                 const SizedBox(height: 2),
                 Text(user.email,
                     maxLines: 1,
@@ -164,10 +172,22 @@ class UserManagementScreen extends StatelessWidget {
             tooltip: 'Edit',
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline,
-                color: Colors.redAccent, size: 18),
-            onPressed: () => _confirmDelete(context, user),
-            tooltip: 'Delete',
+            icon: Icon(
+                user.disabled ? Icons.check_circle_outline : Icons.block,
+                color: isSelf
+                    ? Colors.grey
+                    : (user.disabled ? Colors.greenAccent : AppTheme.orange),
+                size: 18),
+            onPressed: isSelf ? null : () => _confirmSetDisabled(context, user),
+            tooltip: isSelf
+                ? "You can't deactivate your own account"
+                : (user.disabled ? 'Activate' : 'Deactivate'),
+          ),
+          IconButton(
+            icon: Icon(Icons.delete_outline,
+                color: isSelf ? Colors.grey : Colors.redAccent, size: 18),
+            onPressed: isSelf ? null : () => _confirmDelete(context, user),
+            tooltip: isSelf ? "You can't delete your own account" : 'Delete',
           ),
         ],
       ),
@@ -176,35 +196,8 @@ class UserManagementScreen extends StatelessWidget {
 
   Future<void> _showAddInfoDialog(BuildContext context) => showDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppTheme.card,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              const Icon(Icons.info_outline, color: AppTheme.cyan, size: 20),
-              const SizedBox(width: 8),
-              Text('Adding users',
-                  style: AppTheme.orbitron(size: 12, color: Colors.white)),
-            ],
-          ),
-          content: Text(
-            'New accounts are created via:\n\n'
-            '1. Self-registration in the app (Register screen)\n'
-            '2. Manual creation in Firebase Console →\n'
-            '   Authentication → Users → Add user\n\n'
-            'To grant admin role: create the account, then set\n'
-            'role = "admin" via Edit in this screen.',
-            style: AppTheme.inter(size: 12, color: Colors.grey, height: 1.5),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('GOT IT',
-                  style: AppTheme.orbitron(size: 9, color: AppTheme.cyan)),
-            ),
-          ],
-        ),
+        barrierDismissible: false,
+        builder: (_) => const _AddUserDialog(),
       );
 
   Future<void> _showEditDialog(BuildContext context, UserData user) =>
@@ -212,6 +205,58 @@ class UserManagementScreen extends StatelessWidget {
         context: context,
         builder: (_) => _UserEditDialog(user: user),
       );
+
+  Future<void> _confirmSetDisabled(BuildContext context, UserData user) async {
+    final deactivate = !user.disabled;
+    final who = user.name.isEmpty ? user.email : user.name;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.card,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(deactivate ? 'Deactivate "$who"?' : 'Activate "$who"?',
+            style: AppTheme.orbitron(size: 12, color: Colors.white)),
+        content: Text(
+          deactivate
+              ? 'They will be signed out right away and can\'t use their '
+                  'account until you activate it again. Their data is kept.'
+              : 'They will be able to sign in and use their account again.',
+          style: AppTheme.inter(size: 12, color: Colors.grey, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('CANCEL',
+                style: AppTheme.orbitron(size: 9, color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(deactivate ? 'DEACTIVATE' : 'ACTIVATE',
+                style: AppTheme.orbitron(
+                    size: 9,
+                    color: deactivate ? AppTheme.orange : Colors.greenAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await UserService.instance.setDisabled(user.uid, deactivate);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+            content: Text(deactivate ? '$who deactivated' : '$who activated')));
+    } catch (e) {
+      debugPrint('User status change failed: $e');
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+            content: Text('Could not update. Check your connection.')));
+    }
+  }
 
   Future<void> _confirmDelete(BuildContext context, UserData user) async {
     final confirm = await showDialog<bool>(
@@ -227,7 +272,8 @@ class UserManagementScreen extends StatelessWidget {
           'It does NOT delete their Firebase Authentication login — '
           'they can still sign in and a new profile will be created. '
           'To fully remove the account, also delete the user from '
-          'Firebase Console → Authentication.',
+          'Firebase Console → Authentication.\n\n'
+          'To block someone from using the app, use Deactivate instead.',
           style: AppTheme.inter(size: 12, color: Colors.grey, height: 1.5),
         ),
         actions: [
@@ -246,8 +292,16 @@ class UserManagementScreen extends StatelessWidget {
       ),
     );
 
-    if (confirm == true) {
+    if (confirm != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
       await UserService.instance.deleteUser(user.uid);
+    } catch (e) {
+      debugPrint('User delete failed: $e');
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+            content: Text('Could not delete. Check your connection.')));
     }
   }
 }
@@ -268,6 +322,10 @@ class _UserEditDialogState extends State<_UserEditDialog> {
   late String _role;
   bool _saving = false;
   bool _nameAttempted = false;
+  String? _error;
+  // An admin demoting themselves would lock themselves out of the panel.
+  late final bool _isSelf =
+      widget.user.uid == AuthService.instance.currentUser?.uid;
 
   @override
   void initState() {
@@ -343,7 +401,7 @@ class _UserEditDialogState extends State<_UserEditDialog> {
                     r == 'admin' ? AppTheme.orange : AppTheme.accent;
                 return Expanded(
                   child: GestureDetector(
-                    onTap: () => setState(() => _role = r),
+                    onTap: _isSelf ? null : () => setState(() => _role = r),
                     child: Container(
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -371,6 +429,11 @@ class _UserEditDialogState extends State<_UserEditDialog> {
                 );
               }).toList(),
             ),
+            if (_isSelf) ...[
+              const SizedBox(height: 6),
+              Text("You can't change your own role",
+                  style: AppTheme.inter(size: 10, color: Colors.grey)),
+            ],
             const SizedBox(height: 14),
             Text('XP (Level ${levelFor(int.tryParse(_xpCtr.text.trim()) ?? widget.user.xp)})',
                 style: AppTheme.inter(size: 11, color: Colors.grey)),
@@ -401,6 +464,11 @@ class _UserEditDialogState extends State<_UserEditDialog> {
                     borderSide: const BorderSide(color: AppTheme.accent)),
               ),
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!,
+                  style: AppTheme.inter(size: 12, color: Colors.redAccent)),
+            ],
           ],
         ),
       ),
@@ -446,7 +514,10 @@ class _UserEditDialogState extends State<_UserEditDialog> {
       return;
     }
     final xp = int.parse(_xpCtr.text.trim());
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       // Write only the fields this dialog edits. A full UserData.toMap()
       // here would reset every other field (bio, badge, bookmarks, …).
@@ -455,12 +526,167 @@ class _UserEditDialogState extends State<_UserEditDialog> {
           .doc(widget.user.uid)
           .update({
         'name': _nameCtr.text.trim(),
-        'role': _role,
+        if (!_isSelf) 'role': _role,
         if (xp != widget.user.xp) 'xp': xp,
       });
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) setState(() => _saving = false);
+      debugPrint('User update failed: $e');
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = 'Could not save. Check your connection and try again.';
+        });
+      }
     }
+  }
+}
+
+class _AddUserDialog extends StatefulWidget {
+  const _AddUserDialog();
+
+  @override
+  State<_AddUserDialog> createState() => _AddUserDialogState();
+}
+
+class _AddUserDialogState extends State<_AddUserDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  String _role = 'fan';
+  bool _saving = false;
+  bool _hidePassword = true;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await AdminUserService.instance.createUser(
+        name: _name.text,
+        email: _email.text,
+        password: _password.text,
+        role: _role,
+      );
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.pop(context);
+      messenger.showSnackBar(SnackBar(content: Text('Account created for ${_email.text.trim()}.')));
+    } catch (e) {
+      debugPrint('Add user failed: $e');
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = e is AdminUserException
+              ? e.message
+              : 'Could not create the account. Check your connection and try again.';
+        });
+      }
+    }
+  }
+
+  InputDecoration _dec(String label, {Widget? suffix}) => InputDecoration(
+        labelText: label,
+        labelStyle: AppTheme.inter(size: 12, color: Colors.grey),
+        isDense: true,
+        suffixIcon: suffix,
+        errorMaxLines: 3,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppTheme.card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('Add user', style: AppTheme.orbitron(size: 13, color: Colors.white)),
+      content: SizedBox(
+        width: 380,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _name,
+                  enabled: !_saving,
+                  textCapitalization: TextCapitalization.words,
+                  style: AppTheme.inter(size: 13, color: Colors.white),
+                  decoration: _dec('Name'),
+                  validator: Validators.validateName,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _email,
+                  enabled: !_saving,
+                  keyboardType: TextInputType.emailAddress,
+                  style: AppTheme.inter(size: 13, color: Colors.white),
+                  decoration: _dec('Email'),
+                  validator: Validators.validateEmail,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _password,
+                  enabled: !_saving,
+                  obscureText: _hidePassword,
+                  style: AppTheme.inter(size: 13, color: Colors.white),
+                  decoration: _dec('Password',
+                      suffix: IconButton(
+                        icon: Icon(_hidePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                            size: 18, color: Colors.grey),
+                        onPressed: () => setState(() => _hidePassword = !_hidePassword),
+                      )),
+                  validator: Validators.validateNewPassword,
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _role,
+                  dropdownColor: AppTheme.card,
+                  style: AppTheme.inter(size: 13, color: Colors.white),
+                  decoration: _dec('Role'),
+                  items: const [
+                    DropdownMenuItem(value: 'fan', child: Text('Fan')),
+                    DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                  ],
+                  onChanged: _saving ? null : (v) => setState(() => _role = v ?? 'fan'),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_error!, style: AppTheme.inter(size: 12, color: Colors.redAccent)),
+                ],
+                const SizedBox(height: 8),
+                Text('The new user picks their interests when they first sign in.',
+                    style: AppTheme.inter(size: 11, color: Colors.grey)),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: Text('CANCEL', style: AppTheme.orbitron(size: 9, color: Colors.grey)),
+        ),
+        ElevatedButton(
+          onPressed: _saving ? null : _create,
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
+          child: _saving
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : Text('CREATE', style: AppTheme.orbitron(size: 9, color: Colors.white)),
+        ),
+      ],
+    );
   }
 }

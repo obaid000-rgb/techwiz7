@@ -8,7 +8,7 @@ import '../../services/saved_event_store.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/event_format.dart';
 import 'event_detail_screen.dart';
-import 'widgets/event_card.dart' show EventTypeChip, HappeningNowBadge;
+import 'widgets/event_card.dart' show EventTypeChip, EventStatusBadge;
 import 'widgets/save_event_button.dart' show NoLongerListedNote, OfflineCopyNote;
 
 /// My Agenda: the fan's saved events, read only from the offline copies in
@@ -150,7 +150,6 @@ class _MyAgendaScreenState extends State<MyAgendaScreen> {
 
   Widget _tile(SavedEventEntry entry) {
     final ev = entry.event;
-    final happening = ev.statusAt(DateTime.now()) == EventStatus.happeningNow;
     final place = [ev.venue, ev.city].where((x) => x.trim().isNotEmpty).join(', ');
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -191,7 +190,7 @@ class _MyAgendaScreenState extends State<MyAgendaScreen> {
                     children: [
                       Wrap(spacing: 6, runSpacing: 4, children: [
                         EventTypeChip(event: ev),
-                        if (happening) const HappeningNowBadge(),
+                        EventStatusBadge(event: ev),
                       ]),
                       const SizedBox(height: 6),
                       Text(ev.title,

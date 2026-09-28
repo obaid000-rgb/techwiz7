@@ -6,6 +6,7 @@ import '../../models/fandom.dart';
 import '../../models/post.dart';
 import '../../services/resource_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/creator_widgets.dart';
 import '../../widgets/lore_card.dart';
 import '../fandoms/fandom_page_screen.dart';
 
@@ -74,8 +75,6 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
                 remove: (x) =>
                     x.copyWith(creatorIds: {...x.creatorIds}..remove(id))
               ),
-            for (final t in f.tags)
-              (label: '#$t', remove: (x) => x.copyWith(tags: {...x.tags}..remove(t))),
             if (f.myInterestsOnly)
               (label: 'My interests', remove: (x) => x.copyWith(myInterestsOnly: false)),
             if (f.sort != ResourceSort.newest)
@@ -167,10 +166,6 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
           ],
           const SizedBox(height: 12),
           _typeSelector(),
-          if (_c.trendingTags.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _trendingRow(),
-          ],
           const SizedBox(height: 10),
           Row(
             children: [
@@ -227,6 +222,11 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
               ),
             ),
           ],
+          CreatorBubbleRow(
+            title: 'CREATORS',
+            creators: _c.matchingCreators,
+            padding: const EdgeInsets.only(top: 14),
+          ),
           const SizedBox(height: 14),
           Text('$count resource${count == 1 ? '' : 's'}',
               style: AppTheme.inter(size: 12, color: AppTheme.textMuted)),
@@ -303,44 +303,6 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
       ),
     );
   }
-
-  Widget _trendingRow() => SizedBox(
-        height: 36,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: Center(
-                child: Icon(Icons.local_fire_department_rounded,
-                    color: AppTheme.orange.withValues(alpha: 0.9), size: 18),
-              ),
-            ),
-            for (final t in _c.trendingTags)
-              Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: FilterChip(
-                  label: Text('#$t'),
-                  selected: _c.filter.tags.contains(t),
-                  onSelected: (_) => _c.toggleTag(t),
-                  showCheckmark: false,
-                  visualDensity: VisualDensity.compact,
-                  labelStyle: AppTheme.inter(
-                      size: 11,
-                      weight: FontWeight.w600,
-                      color: _c.filter.tags.contains(t)
-                          ? Colors.black
-                          : AppTheme.orange),
-                  selectedColor: AppTheme.orange,
-                  backgroundColor: AppTheme.orange.withValues(alpha: 0.1),
-                  side: BorderSide(
-                      color: AppTheme.orange
-                          .withValues(alpha: _c.filter.tags.contains(t) ? 1 : 0.4)),
-                ),
-              ),
-          ],
-        ),
-      );
 
   Widget _fandomChip(Fandom f) => Material(
         color: AppTheme.card,

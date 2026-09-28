@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../controllers/beginner_hub/beginner_hub_controller.dart';
 import '../../models/app_category.dart';
+import '../../logic/glossary_query.dart';
 import '../../models/glossary_term.dart';
 import '../../services/category_service.dart';
 import '../../services/glossary_service.dart';
@@ -39,7 +41,11 @@ class _GlossaryScreenState extends State<GlossaryScreen> {
       widget.categoriesStream ?? CategoryService.instance.watchCategories();
 
   final _searchCtr = TextEditingController();
-  String _query = '';
+  // Search text the results use, set 250 ms after the last keystroke. Only
+  // the results listen to it, so typing never rebuilds the header, search
+  // bar or data streams.
+  final _query = ValueNotifier<String>('');
+  Timer? _debounce;
   String? _categoryFilter; // null = all
 
   @override
@@ -47,15 +53,23 @@ class _GlossaryScreenState extends State<GlossaryScreen> {
     super.initState();
     BeginnerHubController.markGlossaryOpened();
     _searchCtr.addListener(() {
-      final q = _searchCtr.text.trim().toLowerCase();
-      if (q != _query) setState(() => _query = q);
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 250), () => _query.value = _searchCtr.text);
     });
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtr.dispose();
+    _query.dispose();
     super.dispose();
+  }
+
+  void _clearSearch() {
+    _debounce?.cancel();
+    _searchCtr.clear();
+    _query.value = '';
   }
 
   void _open(GlossaryTerm term, List<GlossaryTerm> all, Map<String, AppCategory> cats) {
@@ -84,7 +98,11 @@ class _GlossaryScreenState extends State<GlossaryScreen> {
                   SliverToBoxAdapter(child: _searchBar()),
                   if (snapshot.hasData && snapshot.data!.isNotEmpty)
                     SliverToBoxAdapter(child: _filters(snapshot.data!, catsByKey)),
-                  ..._content(snapshot, catsByKey),
+                  ValueListenableBuilder<String>(
+                    valueListenable: _query,
+                    builder: (context, query, _) =>
+                        SliverMainAxisGroup(slivers: _content(snapshot, catsByKey, query)),
+                  ),
                   const SliverToBoxAdapter(child: SizedBox(height: 28)),
                 ],
               );
@@ -170,17 +188,24 @@ class _GlossaryScreenState extends State<GlossaryScreen> {
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: TextField(
               controller: _searchCtr,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => FocusScope.of(context).unfocus(),
               style: AppTheme.inter(size: 13, color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'Search terms or meanings…',
                 hintStyle: AppTheme.inter(size: 13, color: Colors.white38),
                 prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.cyan, size: 20),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.close_rounded, color: Colors.white54, size: 18),
-                        onPressed: _searchCtr.clear,
-                      ),
+                // Rebuilds only this button as the text changes.
+                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _searchCtr,
+                  builder: (context, value, _) => value.text.isEmpty
+                      ? const SizedBox.shrink()
+                      : IconButton(
+                          tooltip: 'Clear search',
+                          icon: const Icon(Icons.close_rounded, color: Colors.white54, size: 18),
+                          onPressed: _clearSearch,
+                        ),
+                ),
                 filled: true,
                 fillColor: Colors.white.withValues(alpha: 0.06),
                 isDense: true,
@@ -274,8 +299,8 @@ class _GlossaryScreenState extends State<GlossaryScreen> {
   // ── Results ──────────────────────────────────────────────────────────────
 
   List<Widget> _content(
-      AsyncSnapshot<List<GlossaryTerm>> snapshot, Map<String, AppCategory> catsByKey) {
-    if (snapshot.hasError) {
+      AsyncSnapshot<List<GlossaryTerm>> snapshot, Map<String, AppCategory> catsByKey, String query) {
+    if (snapshot.hasError && !snapshot.hasData) {
       return [
         _stateSliver(Icons.wifi_off_rounded, 'Could not load the glossary',
             'Check your connection and try again.'),
@@ -296,25 +321,30 @@ class _GlossaryScreenState extends State<GlossaryScreen> {
             'Check back soon for fandom terminology.'),
       ];
     }
-    final filtered = all.where((t) {
+    // Same search as the admin Glossary (filterGlossary), then the
+    // category chip filter.
+    final names = {
+      for (final t in all)
+        if (t.category.isNotEmpty) t.category: _categoryLabel(t.category, catsByKey),
+    };
+    final filtered = filterGlossary(all, query, names).where((t) {
       final key = t.category.isEmpty ? _kGeneral : t.category;
-      if (_categoryFilter != null && key != _categoryFilter) return false;
-      if (_query.isEmpty) return true;
-      return t.term.toLowerCase().contains(_query) ||
-          t.definition.toLowerCase().contains(_query);
+      return _categoryFilter == null || key == _categoryFilter;
     }).toList();
     if (filtered.isEmpty) {
+      final searching = normalizeGlossaryText(query).isNotEmpty;
       return [
         _stateSliver(
           Icons.search_off_rounded,
-          _query.isEmpty ? 'No terms in this category' : 'No terms match "${_searchCtr.text.trim()}"',
-          'Try another word or clear the filters.',
+          searching ? 'No terms match "${query.trim()}"' : 'No terms in this category',
+          searching ? 'Try another word.' : 'Try another category.',
           action: TextButton(
             onPressed: () {
-              _searchCtr.clear();
+              _clearSearch();
               setState(() => _categoryFilter = null);
             },
-            child: Text('CLEAR FILTERS', style: AppTheme.orbitron(size: 9, color: AppTheme.cyan)),
+            child: Text(searching ? 'CLEAR SEARCH' : 'CLEAR FILTERS',
+                style: AppTheme.orbitron(size: 9, color: AppTheme.cyan)),
           ),
         ),
       ];
@@ -351,6 +381,12 @@ class _GlossaryScreenState extends State<GlossaryScreen> {
               ),
             ),
             childCount: filtered.length,
+            // Find each card by its key, so a card that stays in the results
+            // keeps its state instead of replaying its fade-in on every letter.
+            findChildIndexCallback: (key) {
+              final i = filtered.indexWhere((t) => ValueKey('${t.id}|$_categoryFilter') == key);
+              return i < 0 ? null : i;
+            },
           ),
         ),
       ),

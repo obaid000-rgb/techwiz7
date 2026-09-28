@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../config/app_info.dart';
+import '../../models/faq.dart';
 import '../../services/auth_service.dart';
+import '../../services/faq_service.dart';
 import '../../services/inquiry_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/validators.dart';
@@ -36,6 +38,7 @@ class ContactUsScreen extends StatelessWidget {
           ]),
         ),
         const SizedBox(height: 30),
+        const _FaqSection(),
         const FadeSlideIn(
           delay: Duration(milliseconds: 120),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -498,4 +501,86 @@ class _GridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ── Frequently asked questions ───────────────────────────────────────────────
+
+class _FaqSection extends StatefulWidget {
+  const _FaqSection();
+
+  @override
+  State<_FaqSection> createState() => _FaqSectionState();
+}
+
+class _FaqSectionState extends State<_FaqSection> {
+  late final Stream<List<Faq>> _faqs = FaqService.instance.watchActive();
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Faq>>(
+      stream: _faqs,
+      builder: (context, snap) {
+        final all = snap.data ?? const <Faq>[];
+        if (all.isEmpty) return const SizedBox.shrink();
+        final words = _query.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+        final shown = all.where((f) {
+          final text = '${f.question} ${f.answer}'.toLowerCase();
+          return words.every(text.contains);
+        }).toList();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 32),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const InfoSectionHeading(eyebrow: 'QUICK ANSWERS', title: 'Frequently asked questions'),
+            if (all.length > 5)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TextField(
+                  onChanged: (v) => setState(() => _query = v.trim()),
+                  style: AppTheme.inter(size: 14, color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: 'Search questions',
+                    prefixIcon: Icon(Icons.search, size: 18),
+                  ),
+                ),
+              ),
+            GlassCard(
+              padding: EdgeInsets.zero,
+              child: shown.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Text('No questions match "$_query".',
+                          style: AppTheme.inter(size: 13, color: AppTheme.textMuted)),
+                    )
+                  : Material(
+                      color: Colors.transparent,
+                      child: Column(children: [
+                        for (var i = 0; i < shown.length; i++) ...[
+                          if (i > 0) const Divider(height: 1, color: InfoColors.glassBorder),
+                          Theme(
+                            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                            child: ExpansionTile(
+                              key: PageStorageKey('faq-${shown[i].id}'),
+                              tilePadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 2),
+                              childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+                              iconColor: InfoColors.lavender,
+                              collapsedIconColor: AppTheme.textMuted,
+                              title: Text(shown[i].question,
+                                  style: AppTheme.inter(size: 14, weight: FontWeight.w600, color: Colors.white)),
+                              expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(shown[i].answer,
+                                    style: AppTheme.inter(size: 13, color: AppTheme.textSecondary, height: 1.5)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ]),
+                    ),
+            ),
+          ]),
+        );
+      },
+    );
+  }
 }

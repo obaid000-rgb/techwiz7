@@ -22,6 +22,7 @@ class _CreatorFormScreenState extends State<CreatorFormScreen> {
   bool _isVerified = false;
   bool _isActive = true;
   bool _saving = false;
+  bool _imageBusy = false;
   String? _error;
 
   @override
@@ -49,6 +50,10 @@ class _CreatorFormScreenState extends State<CreatorFormScreen> {
     final name = _nameCtr.text.trim();
     if (name.isEmpty) {
       setState(() => _error = 'Name is required.');
+      return;
+    }
+    if (_imageBusy) {
+      setState(() => _error = 'Wait for the image to finish uploading.');
       return;
     }
     setState(() {
@@ -111,7 +116,7 @@ class _CreatorFormScreenState extends State<CreatorFormScreen> {
             style: AppTheme.orbitron(size: 13)),
         actions: [
           TextButton(
-            onPressed: _saving ? null : _save,
+            onPressed: _saving || _imageBusy ? null : _save,
             child: _saving
                 ? const SizedBox(
                     width: 18,
@@ -151,8 +156,19 @@ class _CreatorFormScreenState extends State<CreatorFormScreen> {
                 isCircular: true,
                 accentColor: AppTheme.orange,
                 onUploaded: (url) => setState(() => _avatarUrl = url),
+                onBusyChanged: (busy) {
+                  if (mounted) setState(() => _imageBusy = busy);
+                },
               ),
             ),
+            if (_imageBusy)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Center(
+                  child: Text('Wait for the image to finish uploading',
+                      style: AppTheme.inter(size: 10, color: Colors.grey)),
+                ),
+              ),
             const SizedBox(height: 16),
             _label('Name'),
             _textField(_nameCtr, hint: 'Crunchyroll'),

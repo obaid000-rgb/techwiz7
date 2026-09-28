@@ -30,6 +30,16 @@ class _FandomFormScreenState extends State<FandomFormScreen> {
   bool _saving = false;
   String? _error;
 
+  // Image uploads in flight (cover + logo); Save waits for them.
+  int _imageUploads = 0;
+  bool get _imageBusy => _imageUploads > 0;
+  void _onImageBusy(bool busy) {
+    if (!mounted) return;
+    setState(() => _imageUploads = busy
+        ? _imageUploads + 1
+        : (_imageUploads > 0 ? _imageUploads - 1 : 0));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +86,10 @@ class _FandomFormScreenState extends State<FandomFormScreen> {
     }
     if (name.isEmpty) {
       setState(() => _error = 'Name is required.');
+      return;
+    }
+    if (_imageBusy) {
+      setState(() => _error = 'Wait for the image to finish uploading.');
       return;
     }
 
@@ -150,7 +164,7 @@ class _FandomFormScreenState extends State<FandomFormScreen> {
             style: AppTheme.orbitron(size: 13)),
         actions: [
           TextButton(
-            onPressed: _saving ? null : _save,
+            onPressed: _saving || _imageBusy ? null : _save,
             child: _saving
                 ? const SizedBox(
                     width: 18,
@@ -211,6 +225,7 @@ class _FandomFormScreenState extends State<FandomFormScreen> {
               accentColor: AppTheme.orange,
               height: 160,
               onUploaded: (url) => setState(() => _coverImageUrl = url),
+              onBusyChanged: _onImageBusy,
             ),
             const SizedBox(height: 16),
             _label('Logo'),
@@ -219,7 +234,14 @@ class _FandomFormScreenState extends State<FandomFormScreen> {
               accentColor: AppTheme.orange,
               height: 110,
               onUploaded: (url) => setState(() => _logoUrl = url),
+              onBusyChanged: _onImageBusy,
             ),
+            if (_imageBusy)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Wait for the image to finish uploading',
+                    style: AppTheme.inter(size: 10, color: Colors.grey)),
+              ),
             const SizedBox(height: 16),
 
             _label('Tags'),

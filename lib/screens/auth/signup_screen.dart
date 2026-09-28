@@ -52,7 +52,12 @@ class _SignupScreenState extends State<SignupScreen> {
       await _applyPendingSelection();
       if (mounted) Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
       setState(() { _errorMessage = _friendlyError(e.code); });
+    } catch (e) {
+      debugPrint('Sign-up failed: $e');
+      if (!mounted) return;
+      setState(() { _errorMessage = 'Could not create your account. Please try again.'; });
     } finally {
       if (mounted) setState(() { _loading = false; });
     }

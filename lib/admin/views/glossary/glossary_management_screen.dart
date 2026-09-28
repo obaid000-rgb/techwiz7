@@ -1,5 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../logic/glossary_query.dart';
+import '../../../models/app_category.dart';
 import '../../../models/glossary_term.dart';
+import '../../../services/category_service.dart';
 import '../../../services/glossary_service.dart';
 import '../../../theme/app_theme.dart';
 import 'glossary_form_screen.dart';
@@ -13,58 +17,88 @@ class GlossaryManagementScreen extends StatefulWidget {
 
 class _GlossaryManagementScreenState extends State<GlossaryManagementScreen> {
   final _searchCtr = TextEditingController();
-  String _query = '';
+  // The search text the results use, updated 250 ms after the last
+  // keystroke. Only the results list listens to it: typing never rebuilds
+  // the header, the search bar or the data streams.
+  final _query = ValueNotifier<String>('');
+  Timer? _debounce;
+  // Created once. Building the stream inside build() made every keystroke
+  // start a new Firestore listener, which reset the list to "loading" and
+  // replaced the search box on each letter.
+  late final Stream<List<GlossaryTerm>> _terms = GlossaryService.instance.watchTerms();
+  late final Stream<List<AppCategory>> _categories = CategoryService.instance.watchCategories();
 
   @override
   void initState() {
     super.initState();
     _searchCtr.addListener(() {
-      setState(() => _query = _searchCtr.text.trim().toLowerCase());
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 250), () => _query.value = _searchCtr.text);
     });
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtr.dispose();
+    _query.dispose();
     super.dispose();
+  }
+
+  void _clearSearch() {
+    _debounce?.cancel();
+    _searchCtr.clear();
+    _query.value = '';
   }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<GlossaryTerm>>(
-      stream: GlossaryService.instance.watchTerms(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: AppTheme.accent));
-        }
-        if (snapshot.hasError) {
-          debugPrint('Glossary load error: ${snapshot.error}');
-          return Center(
-              child: Text('Could not load glossary terms. Check your connection and try again.', style: AppTheme.inter(color: Colors.red)));
-        }
-        final terms = snapshot.data ?? [];
-        final filtered = _query.isEmpty
-            ? terms
-            : terms.where((t) => t.term.toLowerCase().contains(_query)).toList();
-
-        return Column(
-          children: [
-            _header(context),
-            _searchBox(),
-            Expanded(
-              child: terms.isEmpty
-                  ? _empty()
-                  : filtered.isEmpty
-                      ? _noResults()
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                          itemCount: filtered.length,
-                          itemBuilder: (context, i) => _termRow(context, filtered[i]),
-                        ),
-            ),
-          ],
-        );
-      },
+    // The header and search box sit outside the StreamBuilders, so live
+    // Firestore updates never rebuild or reset them.
+    return Column(
+      children: [
+        _header(context),
+        _searchBox(),
+        Expanded(
+          child: StreamBuilder<List<AppCategory>>(
+            stream: _categories,
+            builder: (context, catSnap) {
+              final names = {for (final c in catSnap.data ?? const <AppCategory>[]) c.key: c.name};
+              return StreamBuilder<List<GlossaryTerm>>(
+                stream: _terms,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError && !snapshot.hasData) {
+                    debugPrint('Glossary load error: ${snapshot.error}');
+                    return Center(
+                        child: Text('Could not load glossary terms. Check your connection and try again.',
+                            style: AppTheme.inter(color: Colors.red)));
+                  }
+                  // Spinner only before the very first data; afterwards the
+                  // last list stays on screen while updates arrive.
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator(color: AppTheme.accent));
+                  }
+                  final terms = snapshot.data!;
+                  if (terms.isEmpty) return _empty();
+                  return ValueListenableBuilder<String>(
+                    valueListenable: _query,
+                    builder: (context, query, _) {
+                      final filtered = filterGlossary(terms, query, names);
+                      if (filtered.isEmpty) return _noResults(query);
+                      return ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                        itemCount: filtered.length,
+                        itemBuilder: (context, i) => _termRow(context, filtered[i], names),
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -96,17 +130,25 @@ class _GlossaryManagementScreenState extends State<GlossaryManagementScreen> {
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: TextField(
           controller: _searchCtr,
+          textInputAction: TextInputAction.search,
+          // The keyboard's search key only closes the keyboard; the text stays.
+          onSubmitted: (_) => FocusScope.of(context).unfocus(),
           style: AppTheme.inter(size: 13, color: Colors.white),
           decoration: InputDecoration(
-            hintText: 'Search terms…',
+            hintText: 'Search terms, definitions, categories…',
             hintStyle: AppTheme.inter(size: 13, color: Colors.grey),
             prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 18),
-            suffixIcon: _query.isEmpty
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.close, color: Colors.grey, size: 16),
-                    onPressed: () => _searchCtr.clear(),
-                  ),
+            // Rebuilds only this button as the text changes.
+            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _searchCtr,
+              builder: (context, value, _) => value.text.isEmpty
+                  ? const SizedBox.shrink()
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      icon: const Icon(Icons.close, color: Colors.grey, size: 16),
+                      onPressed: _clearSearch,
+                    ),
+            ),
             filled: true,
             fillColor: AppTheme.card,
             isDense: true,
@@ -138,12 +180,26 @@ class _GlossaryManagementScreenState extends State<GlossaryManagementScreen> {
         ),
       );
 
-  Widget _noResults() => Center(
-        child: Text('No terms match "${_searchCtr.text.trim()}"',
-            style: AppTheme.inter(size: 12, color: Colors.grey)),
+  Widget _noResults(String query) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.search_off_rounded, color: Colors.grey, size: 32),
+            const SizedBox(height: 10),
+            Text('No terms match "${query.trim()}"',
+                textAlign: TextAlign.center,
+                style: AppTheme.inter(size: 12, color: Colors.grey)),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _clearSearch,
+              icon: const Icon(Icons.clear, size: 16, color: AppTheme.cyan),
+              label: Text('Clear search', style: AppTheme.inter(size: 12, color: AppTheme.cyan)),
+            ),
+          ],
+        ),
       );
 
-  Widget _termRow(BuildContext context, GlossaryTerm term) => Container(
+  Widget _termRow(BuildContext context, GlossaryTerm term, Map<String, String> names) => Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
@@ -166,7 +222,7 @@ class _GlossaryManagementScreenState extends State<GlossaryManagementScreen> {
                       style: AppTheme.inter(size: 11, color: Colors.grey)),
                   if (term.category.isNotEmpty) ...[
                     const SizedBox(height: 3),
-                    Text('category: ${term.category}',
+                    Text('Category: ${names[term.category] ?? term.category}',
                         style: AppTheme.inter(size: 9, color: Colors.white38)),
                   ],
                 ],
@@ -211,8 +267,16 @@ class _GlossaryManagementScreenState extends State<GlossaryManagementScreen> {
         ],
       ),
     );
-    if (confirm == true) {
+    if (confirm != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
       await GlossaryService.instance.deleteTerm(term.id);
+    } catch (e) {
+      debugPrint('Glossary delete failed: $e');
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+            content: Text('Could not delete. Check your connection.')));
     }
   }
 }

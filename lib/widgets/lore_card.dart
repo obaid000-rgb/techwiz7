@@ -7,6 +7,7 @@ import '../screens/explore/fandom_detail_screen.dart';
 import '../theme/app_theme.dart';
 import '../utils/levels.dart';
 import '../utils/youtube_utils.dart';
+import 'category_name.dart';
 import 'trending_badge.dart';
 import '../screens/explore/video_player_screen.dart';
 
@@ -19,8 +20,17 @@ class LoreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = post.fandomName.isNotEmpty ? post.fandomName : post.category;
-    final badge = label.isEmpty ? 'LORE ARCHIVE' : label.toUpperCase();
+    if (post.fandomName.isNotEmpty) return _card(context, post.fandomName.toUpperCase());
+    if (post.category.isEmpty) return _card(context, '');
+    // No fandom name: label with the category's display name, not its key.
+    return CategoryName(
+      categoryKey: post.category,
+      builder: (context, name) => _card(context, name),
+    );
+  }
+
+  Widget _card(BuildContext context, String label) {
+    final badge = label.isEmpty ? 'LORE ARCHIVE' : label;
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -93,7 +103,10 @@ class LoreCard extends StatelessWidget {
                           const SizedBox(width: 4),
                           Flexible(
                             child: Text(
-                              label.toUpperCase(),
+                              [
+                                if (label.isNotEmpty) label,
+                                if (post.creatorName.isNotEmpty) 'By ${post.creatorName}',
+                              ].join('  ·  '),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style:
@@ -242,6 +255,40 @@ class _PostMediaThumbnailState extends State<PostMediaThumbnail> {
             ]);
     } else if (widget.post.hasVideo && _videoError) {
       content = _errorPlaceholder();
+    } else if (widget.post.hasClip) {
+      // Uploaded clip: its Cloudinary thumbnail with the play badge and
+      // duration; the card opens Content Detail, which plays it.
+      final secs = widget.post.durationSeconds;
+      content = Stack(fit: StackFit.expand, children: [
+        widget.post.videoThumbnailUrl.isNotEmpty
+            ? Image.network(widget.post.videoThumbnailUrl,
+                fit: BoxFit.cover, errorBuilder: (ctx, e, st) => _placeholder())
+            : _placeholder(),
+        Center(
+          child: Container(
+            padding: EdgeInsets.all(widget.playIconSize * 0.25),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.6),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.play_arrow, color: Colors.white, size: widget.playIconSize),
+          ),
+        ),
+        if (secs > 0)
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.75),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text('${secs ~/ 60}:${(secs % 60).toString().padLeft(2, '0')}',
+                  style: AppTheme.inter(size: 10, color: Colors.white, weight: FontWeight.w700)),
+            ),
+          ),
+      ]);
     } else {
       content = widget.post.imageUrl.isNotEmpty
           ? Image.network(

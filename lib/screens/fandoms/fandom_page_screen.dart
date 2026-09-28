@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../controllers/fandoms/fandom_page_controller.dart';
+import '../../models/creator.dart';
 import '../../models/fandom.dart';
+import '../../services/creator_service.dart';
 import '../../models/post.dart';
 import '../../services/auth_service.dart';
 import '../../services/fandom_service.dart';
@@ -15,6 +17,7 @@ import '../../models/event_item.dart';
 import '../shop/shop_tab.dart' show MerchProductCard, kMerchGridDelegate;
 import '../events/widgets/event_card.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/creator_widgets.dart';
 import '../../widgets/follow_button.dart';
 import '../../widgets/lore_card.dart';
 
@@ -28,6 +31,7 @@ class FandomPageScreen extends StatefulWidget {
 }
 
 class _FandomPageScreenState extends State<FandomPageScreen> {
+  late final Stream<List<Creator>> _creators = CreatorService.instance.watchActive();
   final _controller = const FandomPageController();
   Fandom? _fandom;
   bool _fandomLoaded = false;
@@ -281,6 +285,18 @@ class _FandomPageScreenState extends State<FandomPageScreen> {
                 children: [for (final t in f.tags) FandomTagChip(tag: t)],
               ),
             ],
+            // Active creators covering this fandom; hidden when there are none.
+            StreamBuilder<List<Creator>>(
+              stream: _creators,
+              builder: (context, snap) => CreatorBubbleRow(
+                title: 'CREATORS',
+                creators: [
+                  for (final c in snap.data ?? const <Creator>[])
+                    if (c.fandomIds.contains(f.id)) c,
+                ],
+                padding: const EdgeInsets.only(top: 16),
+              ),
+            ),
           ],
         ),
       );

@@ -90,3 +90,40 @@ EventValidation validateEvent(EventItem event) {
     sessions: sessionErrors,
   );
 }
+
+/// Fan-facing label for a status: COMING SOON before the start, NOW while
+/// the event runs, CLOSED once it has ended.
+String eventStatusLabel(EventStatus s) => switch (s) {
+      EventStatus.upcoming => 'COMING SOON',
+      EventStatus.happeningNow => 'NOW',
+      EventStatus.ended => 'CLOSED',
+    };
+
+/// Admin form date/time rules, compared as DateTime values (never strings),
+/// all in device local time:
+///  - a start is required;
+///  - a new event, or a changed start, can't begin in the past;
+///  - a changed end can't be in the past;
+///  - the end, when set, must be after the start (equal is not allowed).
+/// An existing event that is already running can still be edited as long
+/// as its start and end are left unchanged ([previousStart]/[previousEnd]).
+String? validateEventTiming({
+  required DateTime? start,
+  required DateTime? end,
+  required DateTime now,
+  bool isNew = true,
+  DateTime? previousStart,
+  DateTime? previousEnd,
+}) {
+  if (start == null) return 'Choose a start date and time.';
+  final startChanged = isNew || previousStart != start;
+  final endChanged = isNew || previousEnd != end;
+  if (startChanged && start.isBefore(now)) {
+    return 'The start date and time cannot be in the past.';
+  }
+  if (end != null) {
+    if (!end.isAfter(start)) return 'End time must be after the start time.';
+    if (endChanged && end.isBefore(now)) return 'The end date and time cannot be in the past.';
+  }
+  return null;
+}

@@ -17,6 +17,10 @@ class ImageUploadField extends StatefulWidget {
   final bool isCircular;
   final double circleRadius;
 
+  /// Fires true when an upload starts and false when it finishes or fails,
+  /// so a form can disable Save while the image is still uploading.
+  final ValueChanged<bool>? onBusyChanged;
+
   const ImageUploadField({
     super.key,
     this.initialUrl,
@@ -25,6 +29,7 @@ class ImageUploadField extends StatefulWidget {
     this.height = 180,
     this.isCircular = false,
     this.circleRadius = 46,
+    this.onBusyChanged,
   });
 
   @override
@@ -44,6 +49,15 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
     _url = (raw == null || raw.isEmpty) ? null : raw;
   }
 
+  @override
+  void dispose() {
+    // Removed mid-upload: release the form's busy state. Deferred because
+    // the tree is locked during dispose, so the callback must not run now.
+    final onBusy = widget.onBusyChanged;
+    if (_uploading && onBusy != null) Future.microtask(() => onBusy(false));
+    super.dispose();
+  }
+
   Future<void> _pick(ImageSource source) async {
     try {
       final file = await _picker.pickImage(
@@ -57,6 +71,7 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
         _uploading = true;
         _error = null;
       });
+      widget.onBusyChanged?.call(true);
       final url = await CloudinaryService.instance.uploadImage(file);
       if (!mounted) return;
       setState(() {
@@ -64,13 +79,16 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
         _uploading = false;
       });
       widget.onUploaded(url);
+      widget.onBusyChanged?.call(false);
     } catch (e) {
+      debugPrint('Image upload failed: $e');
       if (!mounted) return;
+      final wasUploading = _uploading;
       setState(() {
         _uploading = false;
-        debugPrint('Image upload failed: $e');
         _error = 'Upload failed';
       });
+      if (wasUploading) widget.onBusyChanged?.call(false);
     }
   }
 

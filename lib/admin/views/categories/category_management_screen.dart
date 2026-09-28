@@ -16,6 +16,10 @@ class CategoryManagementScreen extends StatefulWidget {
 class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
   final _searchCtr = TextEditingController();
   String _query = '';
+  // Created once: rebuilding (e.g. on each search keystroke) must not
+  // resubscribe, or the list flashes a spinner and the keyboard closes.
+  late final Stream<List<AppCategory>> _categories =
+      CategoryService.instance.watchCategories();
 
   @override
   void initState() {
@@ -34,17 +38,17 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<AppCategory>>(
-      stream: CategoryService.instance.watchCategories(),
+      stream: _categories,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-              child: CircularProgressIndicator(color: AppTheme.orange));
-        }
-        if (snapshot.hasError) {
+        if (snapshot.hasError && !snapshot.hasData) {
           debugPrint('Categories load error: ${snapshot.error}');
           return Center(
               child: Text('Could not load categories. Check your connection and try again.',
                   style: AppTheme.inter(color: Colors.red)));
+        }
+        if (!snapshot.hasData) {
+          return const Center(
+              child: CircularProgressIndicator(color: AppTheme.orange));
         }
         final cats = List<AppCategory>.from(snapshot.data ?? [])
           ..sort((a, b) => a.order.compareTo(b.order));
@@ -181,12 +185,23 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
         itemCount: cats.length,
         // onReorder (not the newer onReorderItem) so older Flutter SDKs build.
         // ignore: deprecated_member_use
-        onReorder: (oldIndex, newIndex) {
+        onReorder: (oldIndex, newIndex) async {
           if (newIndex > oldIndex) newIndex -= 1;
           final reordered = List<AppCategory>.from(cats);
           final moved = reordered.removeAt(oldIndex);
           reordered.insert(newIndex, moved);
-          CategoryService.instance.reorderCategories(reordered);
+          final messenger = ScaffoldMessenger.of(context);
+          try {
+            await CategoryService.instance.reorderCategories(reordered);
+          } catch (e) {
+            debugPrint('Category reorder failed: $e');
+            if (!mounted) return;
+            messenger
+              ..hideCurrentSnackBar()
+              ..showSnackBar(const SnackBar(
+                  content: Text(
+                      'Could not save the new order. Check your connection and try again.')));
+          }
         },
         itemBuilder: (context, i) =>
             _catRow(context, cats[i], key: ValueKey(cats[i].id)),
@@ -253,7 +268,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                   Wrap(
                     spacing: 4,
                     runSpacing: 4,
-                    children: [_postCountBadge(cat), _statusBadge(cat)],
+                    children: [_PostCountBadge(cat.key, key: ValueKey('count-${cat.key}')), _statusBadge(cat)],
                   ),
                 ],
               ),
@@ -292,23 +307,6 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
         ),
       );
 
-  Widget _postCountBadge(AppCategory cat) => StreamBuilder<int>(
-        stream: CategoryService.instance.watchPostCount(cat.key),
-        builder: (context, snap) {
-          final count = snap.data ?? 0;
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            margin: const EdgeInsets.only(right: 4),
-            decoration: BoxDecoration(
-              color: AppTheme.cyan.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.4)),
-            ),
-            child: Text('$count post${count == 1 ? '' : 's'}',
-                style: AppTheme.inter(size: 9, color: AppTheme.cyan)),
-          );
-        },
-      );
 
   Widget _thumb(AppCategory cat, {double size = 44}) {
     if (cat.imageUrl != null && cat.imageUrl!.isNotEmpty) {
@@ -359,39 +357,35 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
         ),
       );
 
-  Future<void> _confirmDelete(
-      BuildContext context, AppCategory cat) async {
-    final usage = await CategoryService.instance.checkUsage(cat.key);
-    final fandomCount = usage['fandoms'] ?? 0;
-    final total = (usage['posts'] ?? 0) + (usage['merchandise'] ?? 0);
-    if (!context.mounted) return;
+  Future<void> _confirmDelete(BuildContext _, AppCategory cat) async {
+    // The screen's own context: a row's context can be rebuilt away while
+    // the usage check runs, which made the delete silently do nothing.
+    final messenger = ScaffoldMessenger.of(context);
+    void show(String msg) => messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg)));
 
-    if (fandomCount > 0) {
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppTheme.card,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('Can\'t delete "${cat.name}"',
-              style: AppTheme.orbitron(size: 12, color: Colors.white)),
-          content: Text(
-              '$fandomCount active fandom${fandomCount == 1 ? '' : 's'} '
-              '${fandomCount == 1 ? 'still uses' : 'still use'} this category.\n\n'
-              'Move ${fandomCount == 1 ? 'it' : 'them'} to another category or '
-              'deactivate ${fandomCount == 1 ? 'it' : 'them'} in Fandoms first.',
-              style: AppTheme.inter(size: 12, color: Colors.grey)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('OK',
-                  style: AppTheme.orbitron(size: 9, color: AppTheme.orange)),
-            ),
-          ],
-        ),
-      );
+    Map<String, int> usage;
+    try {
+      usage = await CategoryService.instance.checkUsage(cat.key);
+    } catch (e) {
+      debugPrint('Category usage check failed: $e');
+      show('Could not check this category. Check your connection and try again.');
       return;
     }
+    if (!mounted) return;
+    final fandomCount = usage['fandoms'] ?? 0;
+    final usedByPosts = (usage['posts'] ?? 0) > 0;
+    final usedByMerch = (usage['merchandise'] ?? 0) > 0;
+    final fandomLine = fandomCount == 0
+        ? ''
+        : '$fandomCount active fandom${fandomCount == 1 ? '' : 's'} use${fandomCount == 1 ? 's' : ''} '
+            'this category. ${fandomCount == 1 ? 'It' : 'They'} will be deactivated '
+            '(hidden from fans, restorable in Fandoms).\n\n';
+    final refLine = usedByPosts || usedByMerch
+        ? 'Some ${[if (usedByPosts) 'posts', if (usedByMerch) 'merchandise'].join(' and ')} '
+            'still use this category and will show no category.\n\n'
+        : '';
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -401,15 +395,8 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Delete "${cat.name}"?',
             style: AppTheme.orbitron(size: 12, color: Colors.white)),
-        content: total > 0
-            ? Text(
-                'Still referenced by:\n'
-                '  • ${usage['posts']} post(s)\n'
-                '  • ${usage['merchandise']} merchandise item(s)\n\n'
-                'Deleting orphans those references. Continue?',
-                style: AppTheme.inter(size: 12, color: Colors.grey))
-            : Text('Remove this category? This cannot be undone.',
-                style: AppTheme.inter(size: 12, color: Colors.grey)),
+        content: Text('$fandomLine${refLine}This cannot be undone.',
+            style: AppTheme.inter(size: 12, color: Colors.grey)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -418,16 +405,57 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('DELETE',
+            child: Text(fandomCount > 0 ? 'DEACTIVATE & DELETE' : 'DELETE',
                 style: AppTheme.orbitron(
                     size: 9, color: Colors.redAccent)),
           ),
         ],
       ),
     );
+    if (confirm != true) return;
 
-    if (confirm == true) {
+    try {
+      if (fandomCount > 0) {
+        await CategoryService.instance.deactivateFandomsIn(cat.key);
+      }
       await CategoryService.instance.deleteCategory(cat.id);
+      show('"${cat.name}" deleted.');
+    } catch (e) {
+      debugPrint('Category delete failed: $e');
+      show('Could not delete "${cat.name}". Check your connection and try again.');
     }
   }
+}
+
+/// Live post count for one category. Owns its stream so rebuilds (search,
+/// reorder) don't reopen the query or resubscribe to a used stream.
+class _PostCountBadge extends StatefulWidget {
+  final String categoryKey;
+  const _PostCountBadge(this.categoryKey, {super.key});
+
+  @override
+  State<_PostCountBadge> createState() => _PostCountBadgeState();
+}
+
+class _PostCountBadgeState extends State<_PostCountBadge> {
+  late final Stream<int> _count = CategoryService.instance.watchPostCount(widget.categoryKey);
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<int>(
+        stream: _count,
+        builder: (context, snap) {
+          final count = snap.data ?? 0;
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            margin: const EdgeInsets.only(right: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.cyan.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.4)),
+            ),
+            child: Text('$count post${count == 1 ? '' : 's'}',
+                style: AppTheme.inter(size: 9, color: AppTheme.cyan)),
+          );
+        },
+      );
 }

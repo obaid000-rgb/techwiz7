@@ -23,6 +23,7 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
   bool _fandomTouched = false;
   String _imageUrl = '';
   bool _saving = false;
+  bool _imageBusy = false;
   String? _error;
 
   @override
@@ -118,8 +119,17 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
             ImageUploadField(
               initialUrl: _imageUrl.isEmpty ? null : _imageUrl,
               onUploaded: (url) => setState(() => _imageUrl = url),
+              onBusyChanged: (busy) {
+                if (mounted) setState(() => _imageBusy = busy);
+              },
               accentColor: AppTheme.orange,
             ),
+            if (_imageBusy)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Wait for the image to finish uploading',
+                    style: AppTheme.inter(size: 11, color: Colors.grey)),
+              ),
             const SizedBox(height: 16),
             _label('Description'),
             _textField(_descCtr,
@@ -128,7 +138,7 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _saving ? null : _save,
+                onPressed: _saving || _imageBusy ? null : _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.orange,
                   foregroundColor: Colors.white,
@@ -200,6 +210,10 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
     final category = fandom?.categoryId ?? _category;
     if (category == null || category.isEmpty) {
       setState(() => _error = 'Choose a category.');
+      return;
+    }
+    if (_imageBusy) {
+      setState(() => _error = 'Wait for the image to finish uploading.');
       return;
     }
 

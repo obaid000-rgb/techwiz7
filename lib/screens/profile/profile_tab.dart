@@ -1,10 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:hive_ce_flutter/hive_flutter.dart';
 import '../../models/app_category.dart';
 import '../../services/auth_service.dart';
 import '../../services/category_service.dart';
-import '../../services/offline_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/levels.dart';
@@ -20,7 +17,6 @@ import 'edit_profile_screen.dart';
 import '../info/about_us_screen.dart';
 import '../info/contact_us_screen.dart';
 import '../notifications/notifications_screen.dart';
-import 'offline_downloads_screen.dart';
 import 'purchase_history_screen.dart';
 import 'saved_bookmarks_screen.dart';
 
@@ -77,7 +73,6 @@ class _ProfileContent extends StatefulWidget {
 }
 
 class _ProfileContentState extends State<_ProfileContent> {
-  late final Future<ValueListenable<Box>> _offlineBox = OfflineService.instance.listenable();
   late final Stream<List<AppCategory>> _categories =
       CategoryService.instance.watchCategories();
 
@@ -333,22 +328,13 @@ class _ProfileContentState extends State<_ProfileContent> {
             color: AppTheme.cyan,
             title: 'Bookmarks',
             count: user.bookmarkedPostIds.length,
-            description: 'Quick links to posts you want to find again.',
-            badgeIcon: Icons.wifi,
-            badge: 'Needs internet',
+            description: 'Posts you bookmark, saved on this phone.',
+            badgeIcon: Icons.wifi_off,
+            badge: 'Works without internet',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const SavedBookmarksScreen()),
             ),
-          ),
-          FutureBuilder<ValueListenable<Box>>(
-            future: _offlineBox,
-            builder: (context, snap) => snap.hasData
-                ? ValueListenableBuilder<Box>(
-                    valueListenable: snap.data!,
-                    builder: (context, box, _) => _offlineTile(box.length),
-                  )
-                : _offlineTile(0),
           ),
           const SizedBox(height: 14),
 
@@ -491,19 +477,6 @@ class _ProfileContentState extends State<_ProfileContent> {
     );
   }
 
-  Widget _offlineTile(int n) => _libraryTile(icon: Icons.download_for_offline_rounded,
-              color: AppTheme.accent,
-              title: 'Offline Downloads',
-              count: n,
-              description: 'Full copies saved to this phone.',
-              badgeIcon: Icons.wifi_off,
-              badge: 'Works without internet',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const OfflineDownloadsScreen()),
-              ),
-      );
-
   Widget _groupLabel(String text) => Align(
         alignment: Alignment.centerLeft,
         child: Padding(
@@ -603,19 +576,53 @@ class _ProfileContentState extends State<_ProfileContent> {
 }
 
 /// Live count of the fan's followed fandoms that are still active.
-class _FollowingStat extends StatelessWidget {
+class _FollowingStat extends StatefulWidget {
   final List<String> fandomIds;
   final Widget Function(int count) builder;
   const _FollowingStat({super.key, required this.fandomIds, required this.builder});
 
   @override
+  State<_FollowingStat> createState() => _FollowingStatState();
+}
+
+class _FollowingStatState extends State<_FollowingStat> {
+  // Held in state so a rebuild doesn't open a new Firestore listener;
+  // recreated only when the followed ids actually change.
+  Stream<List<Fandom>>? _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = _watch();
+  }
+
+  @override
+  void didUpdateWidget(_FollowingStat oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_sameIds(oldWidget.fandomIds, widget.fandomIds)) _stream = _watch();
+  }
+
+  Stream<List<Fandom>>? _watch() => widget.fandomIds.isEmpty
+      ? null
+      : FandomService.instance.watchByIds(widget.fandomIds);
+
+  static bool _sameIds(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (fandomIds.isEmpty) return builder(0);
+    final stream = _stream;
+    if (widget.fandomIds.isEmpty || stream == null) return widget.builder(0);
     return StreamBuilder<List<Fandom>>(
-      stream: FandomService.instance.watchByIds(fandomIds),
-      builder: (context, snap) => builder(snap.hasData
+      stream: stream,
+      builder: (context, snap) => widget.builder(snap.hasData
           ? snap.data!.where((f) => f.isActive).length
-          : fandomIds.length),
+          : widget.fandomIds.length),
     );
   }
 }

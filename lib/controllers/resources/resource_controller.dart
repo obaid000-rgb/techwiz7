@@ -34,7 +34,6 @@ class ResourceController extends ChangeNotifier {
   bool _disposed = false;
 
   List<Post> _results = const [];
-  List<String> _trendingTags = const [];
 
   bool get loading => _loading;
   Object? get error => _error;
@@ -44,13 +43,15 @@ class ResourceController extends ChangeNotifier {
   Set<String> get userCategoryIds => _userCategoryIds;
   bool get hasInterests => _userCategoryIds.isNotEmpty;
   List<Post> get results => _results;
-  List<String> get trendingTags => _trendingTags;
   List<String> get followedFandomIds =>
       AuthService.instance.currentUser?.followedFandomIds ?? const [];
   bool get isSignedIn => AuthService.instance.currentUser != null;
 
   List<Fandom> get matchingFandoms =>
       _data == null ? const [] : matchFandoms(_data!.fandoms, _filter.query);
+
+  List<Creator> get matchingCreators =>
+      _data == null ? const [] : matchCreators(_data!.creators, _filter.query);
 
   /// Creators with at least one result under the current category and
   /// fandom filters (plus the creators already selected, so they can be
@@ -67,7 +68,7 @@ class ResourceController extends ChangeNotifier {
     );
     final ids = {for (final p in scoped) if (p.hasCreator) p.creatorId};
     return d.creators
-        .where((c) => ids.contains(c.id) || f.creatorIds.contains(c.id))
+        .where((c) => (c.isActive && ids.contains(c.id)) || f.creatorIds.contains(c.id))
         .toList();
   }
 
@@ -118,12 +119,6 @@ class ResourceController extends ChangeNotifier {
   void setType(String? type) =>
       setFilter(_filter.copyWith(types: type == null ? {} : {type}));
 
-  void toggleTag(String tag) {
-    final tags = Set<String>.of(_filter.tags);
-    tags.contains(tag) ? tags.remove(tag) : tags.add(tag);
-    setFilter(_filter.copyWith(tags: tags));
-  }
-
   void setMyInterests(bool on) =>
       setFilter(_filter.copyWith(myInterestsOnly: on));
 
@@ -133,8 +128,6 @@ class ResourceController extends ChangeNotifier {
     final d = _data;
     if (d == null) return;
     _results = applyResourceFilter(d.posts, _filter, _userCategoryIds);
-    _trendingTags =
-        computeTrendingTags(d.posts, d.pinnedTagSlugs, DateTime.now());
   }
 
   void _notify() {

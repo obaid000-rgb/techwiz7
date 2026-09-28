@@ -43,12 +43,23 @@ class OnboardingSlideManagementScreen extends StatelessWidget {
                       // onReorder (not the newer onReorderItem) so older
                       // Flutter SDKs build.
                       // ignore: deprecated_member_use
-                      onReorder: (oldIndex, newIndex) {
+                      onReorder: (oldIndex, newIndex) async {
                         if (newIndex > oldIndex) newIndex -= 1;
                         final reordered = List<OnboardingSlide>.from(slides);
                         final moved = reordered.removeAt(oldIndex);
                         reordered.insert(newIndex, moved);
-                        OnboardingSlideService.instance.reorderSlides(reordered);
+                        final messenger = ScaffoldMessenger.of(context);
+                        try {
+                          await OnboardingSlideService.instance
+                              .reorderSlides(reordered);
+                        } catch (e) {
+                          debugPrint('Slide reorder failed: $e');
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(const SnackBar(
+                                content: Text(
+                                    'Could not save the new order. Check your connection and try again.')));
+                        }
                       },
                       itemBuilder: (context, i) => _slideRow(
                           context, slides[i], i,
@@ -218,8 +229,16 @@ class OnboardingSlideManagementScreen extends StatelessWidget {
         ],
       ),
     );
-    if (confirm == true) {
+    if (confirm != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
       await OnboardingSlideService.instance.deleteSlide(slide.id);
+    } catch (e) {
+      debugPrint('Slide delete failed: $e');
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+            content: Text('Could not delete. Check your connection.')));
     }
   }
 }

@@ -22,7 +22,7 @@ class CategoryDetailScreen extends StatefulWidget {
 class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
   final _controller = const FandomPageController();
   final _searchCtr = TextEditingController();
-  late final Stream<List<Post>> _posts = PostService.instance.watchActivePosts();
+  late Stream<List<Post>> _posts = PostService.instance.watchActivePosts();
   late Future<List<Fandom>> _fandoms = _loadFandoms();
   String _query = '';
 
@@ -83,6 +83,11 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                         strokeWidth: 2, color: AppTheme.cyan),
                   ),
                 )
+              else if (snapshot.hasError)
+                _stateBox(Icons.wifi_off, 'Could not load posts',
+                    'Check your connection.',
+                    onRetry: () => setState(
+                        () => _posts = PostService.instance.watchActivePosts()))
               else if (posts.isEmpty)
                 Center(
                   child: Column(

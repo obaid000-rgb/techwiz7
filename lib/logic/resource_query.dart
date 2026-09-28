@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 
+import '../models/creator.dart';
 import '../models/fandom.dart';
 import '../models/post.dart';
-import '../utils/tag_utils.dart';
 
 enum ResourceSort { newest, mostViewed, trending }
 
@@ -18,7 +18,6 @@ class ResourceFilter {
   final Set<String> categoryIds;
   final Set<String> fandomIds;
   final Set<String> creatorIds;
-  final Set<String> tags;
   final ResourceSort sort;
   final bool myInterestsOnly;
 
@@ -28,7 +27,6 @@ class ResourceFilter {
     this.categoryIds = const {},
     this.fandomIds = const {},
     this.creatorIds = const {},
-    this.tags = const {},
     this.sort = ResourceSort.newest,
     this.myInterestsOnly = false,
   });
@@ -39,7 +37,6 @@ class ResourceFilter {
     Set<String>? categoryIds,
     Set<String>? fandomIds,
     Set<String>? creatorIds,
-    Set<String>? tags,
     ResourceSort? sort,
     bool? myInterestsOnly,
   }) =>
@@ -49,7 +46,6 @@ class ResourceFilter {
         categoryIds: categoryIds ?? this.categoryIds,
         fandomIds: fandomIds ?? this.fandomIds,
         creatorIds: creatorIds ?? this.creatorIds,
-        tags: tags ?? this.tags,
         sort: sort ?? this.sort,
         myInterestsOnly: myInterestsOnly ?? this.myInterestsOnly,
       );
@@ -65,7 +61,6 @@ class ResourceFilter {
       categoryIds.length +
       fandomIds.length +
       creatorIds.length +
-      tags.length +
       (myInterestsOnly ? 1 : 0) +
       (sort != ResourceSort.newest ? 1 : 0);
 }
@@ -88,20 +83,18 @@ bool _anyPrefix(List<String> fieldWords, String q) =>
 // when any word of that field STARTS WITH it ("nar" matches "Naruto").
 // Every query word must match at least one field (AND across words), or
 // the post is excluded (null). For each query word the post earns:
-//   title 3 + any tag 2 + fandomName or creatorName 2 + body 1,
+//   title 3 + fandomName or creatorName 2 + body 1,
 // and the per-word scores are summed. So a title hit on every word
 // outranks posts that only mention the words in their body.
 int? searchScore(Post p, List<String> words) {
   if (words.isEmpty) return 0;
   final title = _words(p.title);
-  final tags = [for (final t in p.tags) ..._words(t)];
   final names = [..._words(p.fandomName), ..._words(p.creatorName)];
   final body = _words(p.content);
   var score = 0;
   for (final q in words) {
     var word = 0;
     if (_anyPrefix(title, q)) word += 3;
-    if (_anyPrefix(tags, q)) word += 2;
     if (_anyPrefix(names, q)) word += 2;
     if (_anyPrefix(body, q)) word += 1;
     if (word == 0) return null;
@@ -130,7 +123,6 @@ List<Post> applyResourceFilter(
 }) {
   final at = now ?? DateTime.now();
   final words = queryWords(filter.query);
-  final wantedTags = normalizeTags(filter.tags).toSet();
   final scores = <String, int>{};
   final out = <Post>[];
   for (final p in posts) {
@@ -147,10 +139,6 @@ List<Post> applyResourceFilter(
     }
     if (filter.creatorIds.isNotEmpty &&
         !filter.creatorIds.contains(p.creatorId)) {
-      continue;
-    }
-    if (wantedTags.isNotEmpty &&
-        !normalizeTags(p.tags).any(wantedTags.contains)) {
       continue;
     }
     if (filter.myInterestsOnly && !userCategoryIds.contains(p.category)) {
@@ -190,33 +178,6 @@ List<Post> applyResourceFilter(
   return out;
 }
 
-List<String> computeTrendingTags(
-  List<Post> posts,
-  Iterable<String> pinnedTagSlugs,
-  DateTime now, {
-  int limit = 10,
-}) {
-  final cutoff = now.subtract(const Duration(days: 14));
-  final scores = <String, double>{};
-  for (final p in posts) {
-    if (!p.isActive || p.createdAt.isBefore(cutoff)) continue;
-    final w = trendingWeight(p, now);
-    for (final t in normalizeTags(p.tags)) {
-      scores[t] = (scores[t] ?? 0) + w;
-    }
-  }
-  final pinned = normalizeTags(pinnedTagSlugs);
-  int byScore(String a, String b) {
-    final c = (scores[b] ?? 0).compareTo(scores[a] ?? 0);
-    return c != 0 ? c : a.compareTo(b);
-  }
-
-  final pinnedSorted = List.of(pinned)..sort(byScore);
-  final rest = scores.keys.where((t) => !pinned.contains(t)).toList()
-    ..sort(byScore);
-  return [...pinnedSorted, ...rest].take(limit).toList();
-}
-
 /// Fandoms whose name or tags match any query word (prefix match), best
 /// match (most query words) first. Any-word so "naruto trailer" still
 /// surfaces Naruto even though "trailer" is not part of its name.
@@ -231,6 +192,20 @@ List<Fandom> matchFandoms(List<Fandom> fandoms, String query) {
     ];
     final n = words.where((q) => _anyPrefix(fieldWords, q)).length;
     if (n > 0) hits[f] = n;
+  }
+  return hits.keys.toList()..sort((a, b) => hits[b]!.compareTo(hits[a]!));
+}
+
+/// Active creators whose name matches a query word (prefix match, any
+/// word), best match first, for the "Creators" row above search results.
+List<Creator> matchCreators(List<Creator> creators, String query) {
+  final words = queryWords(query);
+  if (words.isEmpty) return const [];
+  final hits = <Creator, int>{};
+  for (final c in creators) {
+    if (!c.isActive) continue;
+    final n = words.where((q) => _anyPrefix(_words(c.name), q)).length;
+    if (n > 0) hits[c] = n;
   }
   return hits.keys.toList()..sort((a, b) => hits[b]!.compareTo(hits[a]!));
 }

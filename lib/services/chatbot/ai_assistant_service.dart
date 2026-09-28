@@ -2,101 +2,177 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../../config/gemini_config.dart';
-import 'ai_assistant_knowledge.dart';
+import '../auth_service.dart';
+import 'ai_actions.dart';
+import 'ai_context_builder.dart';
+import 'local_answerer.dart';
 
-/// Why a message couldn't be answered — each maps to its own message.
+/// Why Gemini couldn't answer — each maps to its own notice.
 enum AiAssistantFailure { offline, rateLimited, badKey, unavailable }
 
-class AiAssistantException implements Exception {
-  final AiAssistantFailure kind;
-  
-  const AiAssistantException(this.kind);
+String aiFailureNotice(AiAssistantFailure f) => switch (f) {
+      AiAssistantFailure.rateLimited => 'Lots of questions right now. Try again in a minute.',
+      AiAssistantFailure.badKey => 'The assistant is not available right now.',
+      AiAssistantFailure.offline => "Couldn't reach the assistant. Check your connection.",
+      AiAssistantFailure.unavailable => "Couldn't reach the assistant right now.",
+    };
 
-  String get message => switch (kind) {
-    AiAssistantFailure.offline =>
-      "Couldn't reach the assistant, check your connection and try again.",
-    AiAssistantFailure.rateLimited =>
-      'The assistant is busy right now. Please wait a moment and try again.',
-    AiAssistantFailure.badKey =>
-      'The assistant is not available right now (configuration problem).',
-    AiAssistantFailure.unavailable =>
-      "Couldn't reach the assistant, check your connection and try again.",
-  };
+/// One message in the chat.
+class AiMessage {
+  final bool fromUser;
+  String text;
+  List<AssistantAction> actions;
+  /// Still streaming in.
+  bool streaming;
+  /// Answered on the device from FAQs / glossary (Gemini failed).
+  bool offline;
+  /// Shown above an offline answer (why Gemini wasn't used).
+  String? notice;
+  /// The question to send again from "Try again".
+  String? retryText;
+
+  AiMessage.user(this.text)
+      : fromUser = true,
+        actions = const [],
+        streaming = false,
+        offline = false;
+
+  AiMessage.reply()
+      : fromUser = false,
+        text = '',
+        actions = const [],
+        streaming = true,
+        offline = false;
 }
 
-/// Gemini-backed help assistant, scoped to questions about Fandom Verse.
+/// Gemini-backed Fan Helper. Every answer is written by Gemini, grounded in
+/// the context from [AiContextBuilder] (feature guide + live content +
+/// the fan's own account). When Gemini can't be reached, a local answer is
+/// given from the FAQs and glossary instead.
 class AiAssistantService {
   static final AiAssistantService instance = AiAssistantService._();
   AiAssistantService._();
 
   static const Duration _timeout = Duration(seconds: 45);
 
-  // The system instruction (see ai_assistant_knowledge.dart) is attached to
-  // the model itself, so Gemini receives it with every request and it can't
-  // be pushed out of the conversation by user messages. Temperature is low
-  // so feature answers stay faithful to the written knowledge base and the
-  // refusal line is repeated verbatim rather than paraphrased.
-  late final GenerativeModel _model = GenerativeModel(
-    model: GeminiConfig.model,
-    apiKey: GeminiConfig.apiKey,
-    systemInstruction: Content.system(kAssistantSystemInstruction),
-    generationConfig: GenerationConfig(temperature: 0.2, maxOutputTokens: 700),
-  );
+  GenerativeModel _modelWith(String instruction) => GenerativeModel(
+        model: GeminiConfig.model,
+        apiKey: GeminiConfig.apiKey,
+        systemInstruction: Content.system(instruction),
+        generationConfig: GenerationConfig(temperature: 0.3, maxOutputTokens: 900),
+      );
 
-  // One ChatSession per app launch: the package keeps the running history
-  // and resends it with each message, so follow-ups ("and how do I remove
-  // it?") keep their context. It lives only in memory — closing the app or
-  // tapping "New chat" starts fresh; nothing is stored on the device or in
-  // Firestore.
+  // One ChatSession per app session (as before): the package keeps the
+  // running history and resends it, so follow-ups keep their context. It
+  // lives in memory only; "New chat" starts fresh.
   ChatSession? _chat;
+  String? _chatInstruction;
+  String? _chatUid;
 
-  /// Messages exchanged in the current session, for redrawing the sheet
-  /// when it's reopened. true = from the user.
-  final List<({bool fromUser, String text})> transcript = [];
+  AiContext? context;
+
+  final List<AiMessage> transcript = [];
 
   void reset() {
     _chat = null;
+    _chatInstruction = null;
     transcript.clear();
   }
 
-  /// Sends [text] and returns the reply. Throws [AiAssistantException].
-  Future<String> ask(String text) async {
-    if (GeminiConfig.apiKey.isEmpty) {
-      if (kDebugMode) {
-        debugPrint(
-          '[AiAssistant] no key: run with --dart-define-from-file=secrets.json',
-        );
-      }
-      throw const AiAssistantException(AiAssistantFailure.badKey);
+  /// Called when the chat opens (and before each question): rebuilds the
+  /// context when the 10-minute cache has expired or the account changed.
+  /// A chat already in progress keeps its history under the new context.
+  Future<AiContext> prepare() async {
+    final uid = AuthService.instance.currentUser?.uid;
+    if (_chatUid != null && _chatUid != uid) reset(); // signed in/out: never mix accounts
+    final ctx = await AiContextBuilder.instance.get();
+    context = ctx;
+    if (_chat != null && _chatInstruction != ctx.systemInstruction) {
+      final history = _chat!.history.toList();
+      _chat = _modelWith(ctx.systemInstruction).startChat(history: history);
+      _chatInstruction = ctx.systemInstruction;
     }
-    _chat ??= _model.startChat();
-    transcript.add((fromUser: true, text: text));
-    try {
-      final response = await _chat!
-          .sendMessage(Content.text(text))
-          .timeout(_timeout);
-      final reply = response.text?.trim();
-      if (reply == null || reply.isEmpty) {
-        throw const AiAssistantException(AiAssistantFailure.unavailable);
-      }
-      transcript.add((fromUser: false, text: reply));
-      return reply;
-    } catch (e) {
-      transcript.removeLast(); // the failed question isn't part of the chat
-      final failure = _classify(e);
+    return ctx;
+  }
 
+  String? _labelFor(AiContext ctx, String kind, String id) {
+    String cut(String s) => s.length <= 28 ? s : '${s.substring(0, 27)}…';
+    return switch (kind) {
+      'fandom' => ctx.fandoms[id] == null ? null : 'Open ${cut(ctx.fandoms[id]!.name)}',
+      'event' => ctx.events[id] == null ? null : 'Open ${cut(ctx.events[id]!.title)}',
+      'product' => ctx.products[id] == null ? null : 'View ${cut(ctx.products[id]!.name)}',
+      'post' => ctx.posts[id] == null ? null : 'Read ${cut(ctx.posts[id]!.title)}',
+      'creator' => ctx.creators[id] == null ? null : 'Open ${cut(ctx.creators[id]!.name)}',
+      'category' => ctx.categories[id] == null ? null : 'Open ${cut(ctx.categories[id]!.name)}',
+      _ => null,
+    };
+  }
+
+  /// Sends [text] and yields the reply as it streams in (the same
+  /// [AiMessage] object, updated). Returns normally in every case: when
+  /// Gemini fails the reply is a local answer with [AiMessage.offline] set.
+  Stream<AiMessage> send(String text) async* {
+    transcript.add(AiMessage.user(text));
+    final reply = AiMessage.reply();
+    transcript.add(reply);
+    yield reply;
+
+    final ctx = await prepare();
+    var raw = '';
+    try {
+      if (GeminiConfig.apiKey.isEmpty) {
+        if (kDebugMode) debugPrint('[AiAssistant] no key: run with --dart-define-from-file=secrets.json');
+        throw const _Failure(AiAssistantFailure.badKey);
+      }
+      if (_chat == null) {
+        _chat = _modelWith(ctx.systemInstruction).startChat();
+        _chatInstruction = ctx.systemInstruction;
+        _chatUid = ctx.uid;
+      }
+      await for (final chunk in _chat!.sendMessageStream(Content.text(text)).timeout(_timeout)) {
+        raw += chunk.text ?? '';
+        reply.text = stripActionTags(raw);
+        yield reply;
+      }
+      if (raw.trim().isEmpty) throw const _Failure(AiAssistantFailure.unavailable);
+      reply.text = stripActionTags(raw);
+      reply.actions = parseActionTags(raw, (k, id) => _labelFor(ctx, k, id));
+      reply.streaming = false;
+      yield reply;
+    } catch (e) {
+      final failure = e is _Failure ? e.kind : _classify(e);
       if (kDebugMode) debugPrint('[AiAssistant] ${failure.name}: $e');
-      
-      throw AiAssistantException(failure);
+      reply.streaming = false;
+      if (raw.trim().isNotEmpty) {
+        // Cut off mid-answer: keep what arrived and offer to ask again.
+        reply.text = stripActionTags(raw);
+        reply.notice = aiFailureNotice(failure);
+        reply.retryText = text;
+      } else {
+        final local = answerLocally(text, ctx.faqs, ctx.glossary);
+        reply.text = local.text;
+        reply.offline = true;
+        reply.notice = aiFailureNotice(failure);
+        reply.retryText = text;
+        reply.actions = local.matched
+            ? const []
+            : [AssistantAction('screen', 'contact', kAssistantScreens['contact']!)];
+      }
+      yield reply;
     }
   }
 
+  /// "Try again": drops the failed exchange and asks the question again.
+  Stream<AiMessage> retry(AiMessage failed) {
+    final text = failed.retryText ?? '';
+    final i = transcript.indexOf(failed);
+    if (i > 0) transcript.removeRange(i - 1, i + 1);
+    return send(text);
+  }
+
   static AiAssistantFailure _classify(Object e) {
-    if (e is AiAssistantException) return e.kind;
     if (e is InvalidApiKey) return AiAssistantFailure.badKey;
-    if (e is TimeoutException) {
-      return AiAssistantFailure.offline;
-    }
+    if (e is TimeoutException) return AiAssistantFailure.offline;
     final s = e.toString().toLowerCase();
     // Network first: these messages include the request URL, which itself
     // contains words like "generateContent".
@@ -110,12 +186,32 @@ class AiAssistantService {
     if (s.contains('resource_exhausted') ||
         s.contains('quota') ||
         s.contains('rate limit') ||
-        s.contains('too many requests')) {
+        s.contains('too many requests') ||
+        s.contains('429')) {
       return AiAssistantFailure.rateLimited;
     }
-    if (s.contains('api key') || s.contains('api_key')) {
+    if (s.contains('api key') || s.contains('api_key') || s.contains('permission_denied')) {
       return AiAssistantFailure.badKey;
     }
     return AiAssistantFailure.unavailable;
   }
 }
+
+class _Failure implements Exception {
+  final AiAssistantFailure kind;
+  const _Failure(this.kind);
+}
+
+/// Four starter questions for an empty chat, based on the fan's state.
+List<String> assistantStarters(AiContext? ctx, UserData? user) => [
+      "What's trending this week?",
+      user != null && (ctx?.hasFollows ?? user.followedFandomIds.isNotEmpty)
+          ? 'Any events for my fandoms?'
+          : 'Events near me',
+      user == null
+          ? 'How do levels work?'
+          : (ctx?.atMaxLevel ?? false)
+              ? 'What does Legend unlock?'
+              : 'How do I reach the next level?',
+      user != null && (ctx?.hasOrders ?? false) ? 'Where is my order?' : 'Explain a fandom term',
+    ];

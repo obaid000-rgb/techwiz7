@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../../widgets/video_upload_field.dart';
 import '../../../models/creator.dart';
 import '../../../models/fandom.dart';
 import '../../../models/post.dart';
 import '../../../services/creator_service.dart';
 import '../../../services/post_service.dart';
-import '../../../services/tag_service.dart';
-import '../../../utils/tag_utils.dart';
 import '../../../theme/app_theme.dart';
 import '../../../utils/youtube_utils.dart';
 import '../../widgets/fandom_picker_fields.dart';
@@ -36,15 +35,72 @@ class _PostFormScreenState extends State<PostFormScreen> {
   String? _youtubeVideoId;
   String? _youtubeFieldError;
 
+  // Video: an uploaded short clip (Cloudinary) or a YouTube link. Shown for
+  // every post type, like the YouTube field was; required for Video posts.
+  bool _useClip = false;
+  String _clipUrl = '';
+  String _clipThumbnailUrl = '';
+  bool _uploadingClip = false;
+  bool get _clipMode => _useClip;
+
+  // Image uploads in flight (cover + gallery); Save waits for them.
+  int _imageUploads = 0;
+  bool get _imageBusy => _imageUploads > 0;
+  void _onImageBusy(bool busy) {
+    if (!mounted) return;
+    setState(() => _imageUploads = busy
+        ? _imageUploads + 1
+        : (_imageUploads > 0 ? _imageUploads - 1 : 0));
+  }
+
+  void _setVideoSource(bool clip) {
+    if (clip == _useClip) return;
+    setState(() {
+      _useClip = clip;
+      // Choosing one option clears the other's value.
+      if (clip) {
+        _youtubeUrlCtr.clear();
+      } else {
+        _clipUrl = '';
+        _clipThumbnailUrl = '';
+      }
+    });
+  }
+
+  List<Widget> _videoSourceSection() => [
+        const SizedBox(height: 16),
+        _label(_contentType == 'Video' ? 'Video (required for Video)' : 'Video (optional)'),
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: true, icon: Icon(Icons.upload_rounded, size: 16), label: Text('Upload video')),
+            ButtonSegment(value: false, icon: Icon(Icons.smart_display_outlined, size: 16), label: Text('YouTube link')),
+          ],
+          selected: {_useClip},
+          onSelectionChanged: _uploadingClip ? null : (s) => _setVideoSource(s.first),
+        ),
+        if (_useClip) ...[
+          const SizedBox(height: 12),
+          VideoUploadField(
+            initialUrl: _clipUrl,
+            initialThumbnailUrl: _clipThumbnailUrl,
+            accentColor: AppTheme.cyan,
+            onBusyChanged: (busy) => setState(() => _uploadingClip = busy),
+            onUploaded: (v) => setState(() {
+              _clipUrl = v.url;
+              _clipThumbnailUrl = v.thumbnailUrl;
+              // Duration filled from the clip.
+              if (v.durationSeconds > 0) _durationCtr.text = _formatDuration(v.durationSeconds);
+            }),
+          ),
+        ],
+      ];
+
   static const int _maxGalleryImages = 12;
   final _audioCtr = TextEditingController();
   final _sourceCtr = TextEditingController();
   final _durationCtr = TextEditingController();
   List<Creator>? _creators;
   String _creatorId = '';
-  final List<String> _tags = [];
-  final Map<String, String> _tagDisplay = {};
-  List<String> _tagSuggestions = const [];
   final List<String> _mediaUrls = [];
   int _galleryUploaderKey = 0;
 
@@ -61,30 +117,6 @@ class _PostFormScreenState extends State<PostFormScreen> {
       debugPrint('Creators load failed: $e');
       if (mounted) setState(() => _creators = const []);
     }
-    try {
-      final tags = await TagService.instance.getAll();
-      final posts = await PostService.instance.watchPosts().first;
-      final suggestions = <String>{
-        for (final t in tags) t.id,
-        for (final p in posts) ...normalizeTags(p.tags),
-      }.toList()
-        ..sort();
-      for (final t in tags) {
-        _tagDisplay.putIfAbsent(t.id, () => t.name);
-      }
-      if (mounted) setState(() => _tagSuggestions = suggestions);
-    } catch (e) {
-      debugPrint('Tag suggestions load failed: $e');
-    }
-  }
-
-  void _addTag(String raw) {
-    final slug = normalizeTag(raw);
-    if (slug.isEmpty) return;
-    setState(() {
-      if (!_tags.contains(slug)) _tags.add(slug);
-      _tagDisplay.putIfAbsent(slug, () => raw.trim());
-    });
   }
 
   static int? _parseDuration(String text) {
@@ -108,7 +140,6 @@ class _PostFormScreenState extends State<PostFormScreen> {
     final e = widget.existing;
     if (e != null) {
       _creatorId = e.creatorId;
-      _tags.addAll(normalizeTags(e.tags));
       _mediaUrls.addAll(e.mediaUrls);
       _audioCtr.text = e.audioUrl;
       _sourceCtr.text = e.sourceUrl;
@@ -126,6 +157,9 @@ class _PostFormScreenState extends State<PostFormScreen> {
       _isFandomOfTheDay = e.isFandomOfTheDay;
       _youtubeUrlCtr.text = e.youtubeUrl ?? '';
       _youtubeVideoId = extractYoutubeVideoId(_youtubeUrlCtr.text);
+      _clipUrl = e.videoUrl;
+      _clipThumbnailUrl = e.videoThumbnailUrl;
+      _useClip = e.hasClip;
     }
     _youtubeUrlCtr.addListener(_onYoutubeUrlChanged);
   }
@@ -228,8 +262,11 @@ class _PostFormScreenState extends State<PostFormScreen> {
             ImageUploadField(
               initialUrl: _imageUrl.isEmpty ? null : _imageUrl,
               onUploaded: (url) => setState(() => _imageUrl = url),
+              onBusyChanged: _onImageBusy,
               accentColor: AppTheme.cyan,
             ),
+            ..._videoSourceSection(),
+            if (!_clipMode) ...[
             const SizedBox(height: 16),
             _label(_contentType == 'Video'
                 ? 'YouTube URL (required for Video)'
@@ -284,6 +321,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
                 ),
               ),
             ],
+            ],
             const SizedBox(height: 16),
             _label('Content Type'),
             _dropdown(
@@ -297,9 +335,6 @@ class _PostFormScreenState extends State<PostFormScreen> {
             const SizedBox(height: 16),
             _label('Creator (optional)'),
             _creatorDropdown(),
-            const SizedBox(height: 16),
-            _label('Tags'),
-            _tagInput(),
             const SizedBox(height: 16),
             _label('Status'),
             _dropdown(_status, const [
@@ -333,10 +368,16 @@ class _PostFormScreenState extends State<PostFormScreen> {
             const SizedBox(height: 16),
             _todaysFandomToggle(),
             const SizedBox(height: 28),
+            if (_imageBusy)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('Wait for the image to finish uploading',
+                    style: AppTheme.inter(size: 11, color: Colors.grey)),
+              ),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _saving ? null : _save,
+                onPressed: _saving || _uploadingClip || _imageBusy ? null : _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.cyan,
                   foregroundColor: Colors.black,
@@ -486,6 +527,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
               key: ValueKey('gallery-$_galleryUploaderKey'),
               height: 110,
               accentColor: AppTheme.cyan,
+              onBusyChanged: _onImageBusy,
               onUploaded: (url) => setState(() {
                 if (_mediaUrls.length < _maxGalleryImages) _mediaUrls.add(url);
                 _galleryUploaderKey++;
@@ -515,105 +557,6 @@ class _PostFormScreenState extends State<PostFormScreen> {
         ),
     ], (v) => setState(() => _creatorId = v ?? ''));
   }
-
-  Widget _tagInput() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_tags.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final t in _tags)
-                    InputChip(
-                      label: Text('#$t',
-                          style: AppTheme.inter(size: 11, color: Colors.white)),
-                      backgroundColor: AppTheme.card,
-                      side: BorderSide(
-                          color: AppTheme.cyan.withValues(alpha: 0.5)),
-                      deleteIconColor: Colors.grey,
-                      onDeleted: () => setState(() => _tags.remove(t)),
-                    ),
-                ],
-              ),
-            ),
-          Autocomplete<String>(
-            optionsBuilder: (value) {
-              final q = normalizeTag(value.text);
-              if (q.isEmpty) return const Iterable<String>.empty();
-              return _tagSuggestions
-                  .where((s) => s.contains(q) && !_tags.contains(s))
-                  .take(8);
-            },
-            displayStringForOption: (s) => '#$s',
-            onSelected: (s) => _addTag(_tagDisplay[s] ?? s),
-            fieldViewBuilder: (context, ctrl, focus, onSubmit) => TextField(
-              controller: ctrl,
-              focusNode: focus,
-              style: AppTheme.inter(size: 13, color: Colors.white),
-              textInputAction: TextInputAction.done,
-              onChanged: (v) {
-                if (v.contains(',')) {
-                  for (final part in v.split(',')) {
-                    _addTag(part);
-                  }
-                  ctrl.clear();
-                }
-              },
-              onSubmitted: (v) {
-                _addTag(v);
-                ctrl.clear();
-                focus.requestFocus();
-              },
-              decoration: InputDecoration(
-                hintText: 'Type a tag and press enter, e.g. trailer',
-                filled: true,
-                fillColor: AppTheme.card,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.border),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.border),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.cyan, width: 1.5),
-                ),
-              ),
-            ),
-            optionsViewBuilder: (context, onSelected, options) => Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                color: AppTheme.card,
-                elevation: 6,
-                borderRadius: BorderRadius.circular(12),
-                child: ConstrainedBox(
-                  constraints:
-                      const BoxConstraints(maxHeight: 240, maxWidth: 360),
-                  child: ListView(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    children: [
-                      for (final o in options)
-                        ListTile(
-                          dense: true,
-                          title: Text('#$o',
-                              style: AppTheme.inter(
-                                  size: 13, color: Colors.white)),
-                          onTap: () => onSelected(o),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
 
   Widget _todaysFandomToggle() => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -698,7 +641,19 @@ class _PostFormScreenState extends State<PostFormScreen> {
       setState(() => _error = 'Fix or clear the YouTube URL before saving.');
       return;
     }
-    if (_contentType == 'Video' && youtubeText.isEmpty) {
+    if (_uploadingClip) {
+      setState(() => _error = 'Wait for the video upload to finish.');
+      return;
+    }
+    if (_imageBusy) {
+      setState(() => _error = 'Wait for the image to finish uploading.');
+      return;
+    }
+    if (_contentType == 'Video' && _clipMode && _clipUrl.isEmpty) {
+      setState(() => _error = 'A video is required for Video posts: upload one or switch to a YouTube link.');
+      return;
+    }
+    if (_contentType == 'Video' && !_clipMode && youtubeText.isEmpty) {
       setState(() => _error = 'A YouTube URL is required for Video posts.');
       return;
     }
@@ -742,7 +697,6 @@ class _PostFormScreenState extends State<PostFormScreen> {
       _error = null;
     });
     try {
-      final tags = normalizeTags(_tags);
       final creator = _creatorId.isEmpty
           ? null
           : (_creators ?? const <Creator>[])
@@ -762,11 +716,10 @@ class _PostFormScreenState extends State<PostFormScreen> {
         contentDepth: _contentDepth,
         deepDiveType: _contentDepth == 'deep' ? _deepDiveType : '',
         youtubeUrl: youtubeText.isEmpty ? null : youtubeText,
-        // Saved as false here regardless of the toggle; setFandomOfTheDay
-        // below is what actually flips it on, so the "unset every other
-        // post" side effect always runs through one code path.
-        isFandomOfTheDay: false,
-        tags: tags,
+        // Written as the toggle shows it; savePost unflags every other post
+        // in the same batch when this is true.
+        isFandomOfTheDay: _isFandomOfTheDay,
+        tags: widget.existing?.tags ?? const [],
         creatorId: creator?.id ??
             (_creatorId.isNotEmpty && _creatorId == existing?.creatorId
                 ? existing!.creatorId
@@ -780,24 +733,14 @@ class _PostFormScreenState extends State<PostFormScreen> {
         audioUrl: _contentType == 'Podcast' ? audio : '',
         sourceUrl: _contentType == 'News' ? source : '',
         durationSeconds: hasDuration ? (duration ?? 0) : 0,
+        videoUrl: _clipMode ? _clipUrl : '',
+        videoThumbnailUrl: _clipMode ? _clipThumbnailUrl : '',
       );
 
-      final newTags = await TagService.instance.missing({
-        for (final t in tags) t: (_tagDisplay[t]?.trim().isNotEmpty ?? false)
-            ? _tagDisplay[t]!.trim()
-            : t,
-      });
-      final postId = await PostService.instance.savePostWithTags(
+      await PostService.instance.savePost(
         post,
-        newTags,
         isNew: widget.existing == null,
       );
-
-      if (_isFandomOfTheDay) {
-        await PostService.instance.setFandomOfTheDay(postId);
-      } else if (widget.existing?.isFandomOfTheDay ?? false) {
-        await PostService.instance.clearFandomOfTheDay(postId);
-      }
 
       if (mounted) Navigator.pop(context);
     } catch (e) {

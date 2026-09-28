@@ -1,13 +1,17 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../../models/post.dart';
+import 'package:hive_ce_flutter/hive_flutter.dart';
 import '../../services/auth_service.dart';
-import '../../services/post_service.dart';
-import '../../services/user_service.dart';
+import '../../services/bookmark_store.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/lore_card.dart';
+import '../../widgets/bookmark_button.dart';
+import '../explore/fandom_detail_screen.dart';
+import 'offline_post_detail_screen.dart';
 
-/// The signed-in user's live bookmarks (users/{uid}.bookmarkedPostIds). Needs
-/// a connection — for reading without internet see Offline Downloads.
+/// Saved: the signed-in user's bookmarks, read from their offline copies on
+/// the device, so the list and every post open in airplane mode. On open it
+/// syncs the copies with the server when there is internet.
 class SavedBookmarksScreen extends StatefulWidget {
   const SavedBookmarksScreen({super.key});
 
@@ -16,43 +20,56 @@ class SavedBookmarksScreen extends StatefulWidget {
 }
 
 class _SavedBookmarksScreenState extends State<SavedBookmarksScreen> {
-  late final Stream<List<Post>> _posts = PostService.instance.watchActivePosts();
+  ValueListenable<Box>? _box;
+  bool _syncing = true;
+  bool _online = false;
 
-  Future<void> _setBookmarked(UserData user, String postId, bool bookmarked) async {
-    final ids = List<String>.from(user.bookmarkedPostIds);
-    bookmarked ? ids.add(postId) : ids.remove(postId);
-    AuthService.instance.userNotifier.value = user.copyWith(bookmarkedPostIds: ids);
-    try {
-      await UserService.instance.setBookmarked(user.uid, postId, bookmarked);
-      if (!bookmarked && mounted) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(
-            content: const Text('Removed from bookmarks'),
-            action: SnackBarAction(
-              label: 'UNDO',
-              textColor: AppTheme.cyan,
-              onPressed: () {
-                final current = AuthService.instance.currentUser;
-                if (current != null) _setBookmarked(current, postId, true);
-              },
-            ),
-          ));
-      }
-    } catch (_) {
-      final current = AuthService.instance.currentUser;
-      if (current != null) {
-        final reverted = List<String>.from(current.bookmarkedPostIds);
-        bookmarked ? reverted.remove(postId) : reverted.add(postId);
-        AuthService.instance.userNotifier.value =
-            current.copyWith(bookmarkedPostIds: reverted.toSet().toList());
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not update bookmarks. Try again.')),
-        );
-      }
-    }
+  @override
+  void initState() {
+    super.initState();
+    BookmarkStore.instance.listenable().then((l) {
+      if (mounted) setState(() => _box = l);
+    });
+    _sync();
+  }
+
+  Future<void> _sync() async {
+    final user = AuthService.instance.currentUser;
+    if (user == null) return;
+    final result = await BookmarkStore.instance.sync(user.uid, user.bookmarkedPostIds);
+    if (!mounted) return;
+    setState(() {
+      _syncing = false;
+      _online = result == BookmarkSyncResult.synced;
+    });
+  }
+
+  Future<void> _remove(BookmarkCopy copy) async {
+    // Captured up front: UNDO can fire after this screen is gone, so it must
+    // not look anything up through this State's context.
+    final messenger = ScaffoldMessenger.of(context);
+    final undoContext = context;
+    await setPostBookmarked(context, copy.post, false, messenger: messenger);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: const Text('Removed from bookmarks'),
+        action: SnackBarAction(
+          label: 'UNDO',
+          textColor: AppTheme.cyan,
+          onPressed: () =>
+              setPostBookmarked(undoContext, copy.post, true, messenger: messenger),
+        ),
+      ));
+  }
+
+  void _open(BookmarkCopy copy) {
+    // Online: the normal Content Detail. Offline (or the post was taken
+    // down): the saved copy.
+    final page = _online && !copy.noLongerAvailable
+        ? FandomDetailScreen(post: copy.post)
+        : OfflinePostDetailScreen(copy: copy);
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
   @override
@@ -66,7 +83,15 @@ class _SavedBookmarksScreenState extends State<SavedBookmarksScreen> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Saved Bookmarks', style: AppTheme.orbitron(size: 13)),
+        title: Text('Saved', style: AppTheme.orbitron(size: 13)),
+        actions: [
+          if (_syncing)
+            const Padding(
+              padding: EdgeInsets.all(18),
+              child: SizedBox(
+                  width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan)),
+            ),
+        ],
       ),
       body: ValueListenableBuilder<UserData?>(
         valueListenable: AuthService.instance.userNotifier,
@@ -74,54 +99,54 @@ class _SavedBookmarksScreenState extends State<SavedBookmarksScreen> {
           if (user == null) {
             return _center(Icons.lock_outline, 'Sign in to see your bookmarks', '');
           }
-          return StreamBuilder<List<Post>>(
-            stream: _posts,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return _center(Icons.wifi_off, 'Could not load bookmarks',
-                    'Bookmarks need a connection. Offline Downloads work without one.');
-              }
-              if (!snapshot.hasData) {
-                return const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan));
-              }
-              final byId = {for (final p in snapshot.data!) p.id: p};
-              // Most recently bookmarked first; hidden/deleted posts skipped.
-              final posts = [
-                for (final id in user.bookmarkedPostIds.reversed)
-                  if (byId[id] != null) byId[id]!,
-              ];
-              if (posts.isEmpty) {
-                return _center(Icons.bookmark_border, 'No saved bookmarks yet',
-                    'Tap the bookmark icon on any post in Feed to save it here. Bookmarks are quick links and need internet to open.');
-              }
-              return ListView.builder(
+          final box = _box;
+          if (box == null) {
+            return const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan));
+          }
+          return ValueListenableBuilder<Box>(
+            valueListenable: box,
+            builder: (context, b, _) {
+              final order = {
+                for (var i = 0; i < user.bookmarkedPostIds.length; i++) user.bookmarkedPostIds[i]: i,
+              };
+              // Most recently bookmarked first.
+              final copies = BookmarkStore.instance
+                  .copiesIn(b, user.uid)
+                  .where((c) => order.containsKey(c.post.id))
+                  .toList()
+                ..sort((a, c) => order[c.post.id]!.compareTo(order[a.post.id]!));
+              return ListView(
                 padding: const EdgeInsets.all(16),
-                itemCount: posts.length,
-                itemBuilder: (context, i) => Stack(
-                  children: [
-                    LoreCard(post: posts[i]),
-                    // Same filled bookmark button as Home's post cards.
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: GestureDetector(
-                        onTap: () => _setBookmarked(user, posts[i].id, false),
-                        child: Tooltip(
-                          message: 'Remove bookmark',
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: AppTheme.cyan,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.bookmark, color: Colors.black, size: 16),
-                          ),
-                        ),
-                      ),
+                children: [
+                  Row(children: [
+                    const Icon(Icons.offline_pin, color: AppTheme.accent, size: 16),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text('Everything you save here is available offline.',
+                          style: AppTheme.inter(size: 12, color: AppTheme.textSecondary)),
                     ),
+                  ]),
+                  if (!_syncing && !_online) ...[
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      const Icon(Icons.wifi_off, color: AppTheme.textMuted, size: 14),
+                      const SizedBox(width: 6),
+                      Text('Offline, showing saved copies',
+                          style: AppTheme.inter(size: 12, color: AppTheme.textMuted)),
+                    ]),
                   ],
-                ),
+                  const SizedBox(height: 14),
+                  if (copies.isEmpty)
+                    _center(
+                      Icons.bookmark_border,
+                      user.bookmarkedPostIds.isEmpty ? 'No saved posts yet' : 'Downloading your saved posts…',
+                      user.bookmarkedPostIds.isEmpty
+                          ? 'Tap the bookmark icon on any post to save it here. Saved posts work without internet.'
+                          : 'They will appear here as soon as they are on this phone.',
+                    )
+                  else
+                    for (final c in copies) _tile(c),
+                ],
               );
             },
           );
@@ -130,25 +155,110 @@ class _SavedBookmarksScreenState extends State<SavedBookmarksScreen> {
     );
   }
 
-  Widget _center(IconData icon, String title, String subtitle) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.grey, size: 36),
-              const SizedBox(height: 10),
-              Text(title,
-                  textAlign: TextAlign.center,
-                  style: AppTheme.orbitron(size: 12, color: Colors.grey, weight: FontWeight.w600)),
-              if (subtitle.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(subtitle,
-                    textAlign: TextAlign.center,
-                    style: AppTheme.inter(size: 11, color: Colors.grey)),
-              ],
-            ],
+  Widget _tile(BookmarkCopy c) {
+    final post = c.post;
+    final thumb = c.coverPath ?? c.videoThumbnailPath ?? (c.galleryPaths.isEmpty ? null : c.galleryPaths.first);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _open(c),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  width: 76,
+                  height: 76,
+                  child: thumb != null && !kIsWeb
+                      ? Image.file(File(thumb),
+                          fit: BoxFit.cover, errorBuilder: (ctx, e, s) => _thumbPlaceholder(post.contentType))
+                      : _thumbPlaceholder(post.contentType),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(
+                    [post.contentType.toUpperCase(), if (post.fandomName.isNotEmpty) post.fandomName].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.inter(size: 10, color: AppTheme.cyan, weight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(post.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.inter(size: 14, weight: FontWeight.w600)),
+                  if (c.noLongerAvailable) ...[
+                    const SizedBox(height: 6),
+                    Text('No longer available online',
+                        style: AppTheme.inter(size: 11, color: AppTheme.orange, weight: FontWeight.w600)),
+                  ],
+                ]),
+              ),
+              ValueListenableBuilder<Set<String>>(
+                valueListenable: BookmarkStore.instance.downloading,
+                builder: (context, downloading, _) => downloading.contains(post.id)
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan)),
+                      )
+                    : IconButton(
+                        tooltip: 'Remove bookmark',
+                        icon: const Icon(Icons.bookmark, color: AppTheme.cyan),
+                        onPressed: () => _remove(c),
+                      ),
+              ),
+            ]),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _thumbPlaceholder(String type) => Container(
+        color: AppTheme.bg,
+        alignment: Alignment.center,
+        child: Icon(
+          switch (type) {
+            'Video' => Icons.play_circle_outline,
+            'Podcast' => Icons.headphones_rounded,
+            'Gallery' => Icons.photo_library_outlined,
+            _ => Icons.article_outlined,
+          },
+          color: Colors.white24,
+        ),
+      );
+
+  Widget _center(IconData icon, String title, String subtitle) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.grey, size: 36),
+            const SizedBox(height: 10),
+            Text(title,
+                textAlign: TextAlign.center,
+                style: AppTheme.orbitron(size: 12, color: Colors.grey, weight: FontWeight.w600)),
+            if (subtitle.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(subtitle,
+                  textAlign: TextAlign.center,
+                  style: AppTheme.inter(size: 11, color: Colors.grey)),
+            ],
+          ],
         ),
       );
 }

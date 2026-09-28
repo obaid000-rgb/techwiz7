@@ -42,6 +42,10 @@ class Post {
   final String audioUrl;
   final String sourceUrl;
   final int durationSeconds;
+  // Uploaded short clip (Cloudinary) and its generated thumbnail; a Video
+  // post uses videoUrl when set, otherwise youtubeUrl.
+  final String videoUrl;
+  final String videoThumbnailUrl;
   // All-time views, written only by PostService.recordView's transaction —
   // left out of toMap() for the same reason as the Trending Today counters.
   final int viewCount;
@@ -70,6 +74,8 @@ class Post {
     this.audioUrl = '',
     this.sourceUrl = '',
     this.durationSeconds = 0,
+    this.videoUrl = '',
+    this.videoThumbnailUrl = '',
     this.viewCount = 0,
   });
 
@@ -77,6 +83,7 @@ class Post {
   bool get hasCreator => creatorId.isNotEmpty;
   bool get hasFandom => fandomId.isNotEmpty;
   bool get hasVideo => youtubeUrl != null && youtubeUrl!.isNotEmpty;
+  bool get hasClip => videoUrl.isNotEmpty;
 
   factory Post.fromMap(Map<String, dynamic> map, String docId) => Post(
     id: docId,
@@ -111,6 +118,9 @@ class Post {
     durationSeconds: map['durationSeconds'] is num
         ? (map['durationSeconds'] as num).toInt()
         : 0,
+    videoUrl: map['videoUrl'] is String ? map['videoUrl'] as String : '',
+    videoThumbnailUrl:
+        map['videoThumbnailUrl'] is String ? map['videoThumbnailUrl'] as String : '',
     viewCount: map['viewCount'] is num ? (map['viewCount'] as num).toInt() : 0,
   );
 
@@ -137,6 +147,8 @@ class Post {
     'audioUrl': audioUrl,
     'sourceUrl': sourceUrl,
     'durationSeconds': durationSeconds,
+    'videoUrl': videoUrl,
+    'videoThumbnailUrl': videoThumbnailUrl,
     if (youtubeUrl != null) 'youtubeUrl': youtubeUrl,
   };
 
@@ -161,6 +173,8 @@ class Post {
     String? audioUrl,
     String? sourceUrl,
     int? durationSeconds,
+    String? videoUrl,
+    String? videoThumbnailUrl,
   }) => Post(
     id: id,
     title: title ?? this.title,
@@ -185,6 +199,8 @@ class Post {
     audioUrl: audioUrl ?? this.audioUrl,
     sourceUrl: sourceUrl ?? this.sourceUrl,
     durationSeconds: durationSeconds ?? this.durationSeconds,
+    videoUrl: videoUrl ?? this.videoUrl,
+    videoThumbnailUrl: videoThumbnailUrl ?? this.videoThumbnailUrl,
     viewCount: viewCount,
   );
 }

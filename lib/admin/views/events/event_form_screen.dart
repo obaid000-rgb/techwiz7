@@ -5,7 +5,6 @@ import '../../../models/event_session.dart';
 import '../../../models/event_type.dart';
 import '../../../services/event_service.dart';
 import '../../../theme/app_theme.dart';
-import '../../widgets/category_picker_field.dart';
 import '../../widgets/fandom_picker_fields.dart';
 import '../../../widgets/image_upload_field.dart';
 import 'widgets/agenda_editor.dart';
@@ -38,6 +37,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
   double? _longitude;
   bool _isTrendingOnHome = false;
   bool _saving = false;
+  bool _imageBusy = false;
   String? _error;
   // After the first save attempt, field errors update live as they're fixed.
   bool _showErrors = false;
@@ -82,16 +82,29 @@ class _EventFormScreenState extends State<EventFormScreen> {
     super.dispose();
   }
 
-  // Date pickers offer two years back to three years ahead of today
-  // (previously a fixed 2020–2030).
+  // Date pickers start at today (past days are greyed out) and run three
+  // years ahead; a past time on today is refused with a message.
   DateTime get _firstDate {
     final now = DateTime.now();
-    return DateTime(now.year - 2, now.month, now.day);
+    return DateTime(now.year, now.month, now.day);
   }
 
   DateTime get _lastDate {
     final now = DateTime.now();
     return DateTime(now.year + 3, now.month, now.day);
+  }
+
+  static const _pastMessage = 'You cannot select a previous date or time.';
+
+  bool _notPast(DateTime? picked) {
+    if (picked == null) return false;
+    if (picked.isBefore(DateTime.now())) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text(_pastMessage)));
+      return false;
+    }
+    return true;
   }
 
   EventItem _draft() {
@@ -165,13 +178,6 @@ class _EventFormScreenState extends State<EventFormScreen> {
             _label('Event Type'),
             _typeDropdown(),
             const SizedBox(height: 16),
-            _label('Category'),
-            CategoryPickerField(
-              value: _category,
-              accentColor: AppTheme.pink,
-              onChanged: (v) => setState(() => _category = v),
-            ),
-            const SizedBox(height: 16),
             FandomMultiPicker(
               initialIds: _fandomIds,
               accentColor: AppTheme.pink,
@@ -205,7 +211,19 @@ class _EventFormScreenState extends State<EventFormScreen> {
               onTap: () async {
                 final picked = await pickEventDateTime(context,
                     initial: _start, first: _firstDate, last: _lastDate);
-                if (picked != null) setState(() => _start = picked);
+                if (!_notPast(picked)) return;
+                setState(() {
+                  final end = _endAt;
+                  // Keep end > start: a start at/after the end pushes the
+                  // end forward by the old duration (or clears it).
+                  if (end != null && !end.isAfter(picked!)) {
+                    final duration = end.difference(_start);
+                    _endAt = duration > Duration.zero
+                        ? picked.add(duration)
+                        : null;
+                  }
+                  _start = picked!;
+                });
               },
             ),
             const SizedBox(height: 16),
@@ -244,8 +262,17 @@ class _EventFormScreenState extends State<EventFormScreen> {
             ImageUploadField(
               initialUrl: _imageUrl.isEmpty ? null : _imageUrl,
               onUploaded: (url) => setState(() => _imageUrl = url),
+              onBusyChanged: (busy) {
+                if (mounted) setState(() => _imageBusy = busy);
+              },
               accentColor: AppTheme.pink,
             ),
+            if (_imageBusy)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Wait for the image to finish uploading',
+                    style: AppTheme.inter(size: 11, color: Colors.grey)),
+              ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -282,7 +309,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _saving ? null : _save,
+                onPressed: _saving || _imageBusy ? null : _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.pink,
                   foregroundColor: Colors.white,
@@ -384,7 +411,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
           initial: end ?? _start.add(const Duration(hours: 8)),
           first: _firstDate,
           last: _lastDate);
-      if (picked != null) setState(() => _endAt = picked);
+      if (_notPast(picked)) setState(() => _endAt = picked!);
     }
 
     if (end == null) {
@@ -417,6 +444,10 @@ class _EventFormScreenState extends State<EventFormScreen> {
   }
 
   Future<void> _save() async {
+    if (_imageBusy) {
+      setState(() => _error = 'Wait for the image to finish uploading.');
+      return;
+    }
     final event = _draft();
     final validation = validateEvent(event);
     final missing = event.title.isEmpty || event.city.isEmpty || event.venue.isEmpty;
@@ -427,6 +458,21 @@ class _EventFormScreenState extends State<EventFormScreen> {
             ? 'Title, city and venue name are required.'
             : 'Fix the fields marked in red before saving.';
       });
+      return;
+    }
+    // A new event, or a changed start/end, can't be in the past. An event
+    // that is already running can still be edited without touching them.
+    final existing = widget.existing;
+    final timingError = validateEventTiming(
+      start: event.date,
+      end: event.endAt,
+      now: DateTime.now(),
+      isNew: existing == null,
+      previousStart: existing?.date,
+      previousEnd: existing?.endAt,
+    );
+    if (timingError != null) {
+      setState(() => _error = timingError);
       return;
     }
 

@@ -18,6 +18,7 @@ class _OnboardingSlideFormScreenState extends State<OnboardingSlideFormScreen> {
   late final TextEditingController _descriptionCtr;
   String _imageUrl = '';
   bool _saving = false;
+  bool _imageBusy = false;
   String? _error;
 
   @override
@@ -41,6 +42,10 @@ class _OnboardingSlideFormScreenState extends State<OnboardingSlideFormScreen> {
     final description = _descriptionCtr.text.trim();
     if (title.isEmpty || description.isEmpty) {
       setState(() => _error = 'Title and description are required.');
+      return;
+    }
+    if (_imageBusy) {
+      setState(() => _error = 'Wait for the image to finish uploading.');
       return;
     }
     setState(() {
@@ -86,7 +91,7 @@ class _OnboardingSlideFormScreenState extends State<OnboardingSlideFormScreen> {
             style: AppTheme.orbitron(size: 13)),
         actions: [
           TextButton(
-            onPressed: _saving ? null : _save,
+            onPressed: _saving || _imageBusy ? null : _save,
             child: _saving
                 ? const SizedBox(
                     width: 18,
@@ -127,7 +132,16 @@ class _OnboardingSlideFormScreenState extends State<OnboardingSlideFormScreen> {
               accentColor: AppTheme.pink,
               height: 200,
               onUploaded: (url) => setState(() => _imageUrl = url),
+              onBusyChanged: (busy) {
+                if (mounted) setState(() => _imageBusy = busy);
+              },
             ),
+            if (_imageBusy)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Wait for the image to finish uploading',
+                    style: AppTheme.inter(size: 10, color: Colors.grey)),
+              ),
             const SizedBox(height: 16),
             _field('Title', _titleCtr, hint: 'Explore Your Fandoms'),
             const SizedBox(height: 12),

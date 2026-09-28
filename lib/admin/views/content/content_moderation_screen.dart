@@ -609,5 +609,16 @@ Future<void> _confirmDelete(
       ],
     ),
   );
-  if (confirm == true) await onConfirm();
+  if (confirm != true || !context.mounted) return;
+  // Captured before the await: the row's context may be gone afterwards.
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await onConfirm();
+  } catch (e) {
+    debugPrint('Delete failed: $e');
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(
+          content: Text('Could not delete. Check your connection.')));
+  }
 }

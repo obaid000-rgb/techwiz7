@@ -1,8 +1,13 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../config/app_info.dart';
 import 'firestore_db.dart';
 import 'first_run_service.dart';
+import 'notification_service.dart';
 import 'xp_service.dart';
 
 // Fixed set offered during onboarding
@@ -25,7 +30,7 @@ class WishlistPrice {
       if (v is Map && v['lastSeenPrice'] is num) {
         out['$id'] = WishlistPrice(
           (v['lastSeenPrice'] as num).toDouble(),
-          (v['previousPrice'] as num?)?.toDouble(),
+          v['previousPrice'] is num ? (v['previousPrice'] as num).toDouble() : null,
         );
       }
     });
@@ -57,6 +62,16 @@ class UserData {
   // Fan XP. Written only by XpService (FieldValue.increment) and the admin
   // dialog — left out of toMap() so profile saves never overwrite it.
   final int xp;
+  // True for the stand-in AuthService publishes when the real users/{uid}
+  // doc couldn't be loaded yet (offline, no cache). It is replaced as soon
+  // as the real doc arrives. Its empty fields are NOT the fan's data, so it
+  // counts as onboarded (no onboarding over real interests) and must never
+  // be written back to Firestore.
+  final bool isPlaceholder;
+  // Set by an admin (Users > Deactivate). A disabled account is signed out
+  // as soon as its profile loads or the flag changes. Admin-only field:
+  // left out of toMap() and blocked for owners in firestore.rules.
+  final bool disabled;
 
   const UserData({
     required this.uid,
@@ -77,36 +92,42 @@ class UserData {
     this.followedFandomIds = const [],
     this.savedEventIds = const [],
     this.xp = 0,
+    this.isPlaceholder = false,
+    this.disabled = false,
   });
 
   bool get isAdmin => role == 'admin';
-  bool get hasOnboarded => categories.isNotEmpty;
+  bool get hasOnboarded => isPlaceholder || categories.isNotEmpty;
+
+  // Defensive readers: a legacy or console-edited doc with a wrong-typed
+  // field falls back to the default instead of throwing.
+  static String _str(Object? v, [String fallback = '']) =>
+      v is String ? v : fallback;
+  static int _int(Object? v) => v is num ? v.toInt() : 0;
+  static List<String> _strList(Object? v) =>
+      v is List ? v.whereType<String>().toList() : const [];
 
   factory UserData.fromMap(Map<String, dynamic> map, String uid) {
     return UserData(
       uid: uid,
-      name: map['name'] ?? '',
-      email: map['email'] ?? '',
-      avatarUrl: map['avatarUrl'] ?? '',
-      avatarPresetId: map['avatarPresetId'] as String? ?? '',
-      savedEvents: map['savedEvents'] ?? 0,
-      bookmarks: map['bookmarks'] ?? 0,
-      rank: map['rank'] ?? 'LEVEL 1',
-      role: map['role'] ?? 'fan',
-      categories: List<String>.from(map['categories'] ?? []),
-      bio: map['bio'] ?? '',
-      badge: map['badge'] ?? '',
-      bookmarkedPostIds: List<String>.from(map['bookmarkedPostIds'] ?? []),
-      wishlistedProductIds:
-          List<String>.from(map['wishlistedProductIds'] ?? []),
+      name: _str(map['name']),
+      email: _str(map['email']),
+      avatarUrl: _str(map['avatarUrl']),
+      avatarPresetId: _str(map['avatarPresetId']),
+      savedEvents: _int(map['savedEvents']),
+      bookmarks: _int(map['bookmarks']),
+      rank: _str(map['rank'], 'LEVEL 1'),
+      role: _str(map['role'], 'fan'),
+      categories: _strList(map['categories']),
+      bio: _str(map['bio']),
+      badge: _str(map['badge']),
+      bookmarkedPostIds: _strList(map['bookmarkedPostIds']),
+      wishlistedProductIds: _strList(map['wishlistedProductIds']),
       wishlistPrices: WishlistPrice.parseAll(map['wishlistPrices']),
-      followedFandomIds: map['followedFandomIds'] is List
-          ? (map['followedFandomIds'] as List).whereType<String>().toList()
-          : const [],
-      savedEventIds: map['savedEventIds'] is List
-          ? (map['savedEventIds'] as List).whereType<String>().toList()
-          : const [],
-      xp: map['xp'] is num ? (map['xp'] as num).toInt() : 0,
+      followedFandomIds: _strList(map['followedFandomIds']),
+      savedEventIds: _strList(map['savedEventIds']),
+      xp: _int(map['xp']),
+      disabled: map['disabled'] == true,
     );
   }
 
@@ -159,6 +180,8 @@ class UserData {
         followedFandomIds: followedFandomIds ?? this.followedFandomIds,
         savedEventIds: savedEventIds ?? this.savedEventIds,
         xp: xp ?? this.xp,
+        isPlaceholder: isPlaceholder,
+        disabled: disabled,
       );
 }
 
@@ -174,48 +197,227 @@ class AuthService {
   bool get isLoggedIn => userNotifier.value != null;
   UserData? get currentUser => userNotifier.value;
 
+  // How long a new-profile write may take before we accept it as queued
+  // (Firestore persists offline writes and syncs them later).
+  static const Duration _profileWriteTimeout = Duration(seconds: 15);
+  // How long to wait for the real profile before publishing a placeholder,
+  // so the splash screen (which waits for userNotifier) can't hang forever.
+  static const Duration _placeholderDelay = Duration(seconds: 8);
+  static const Duration _profileRetryDelay = Duration(seconds: 20);
+
+  // Retry state for a profile that failed to load (see _watchProfile).
+  String? _watchedUid;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _profileSub;
+  Timer? _placeholderTimer;
+  Timer? _retryTimer;
+  // True while the shown profile came from the local cache only, so the
+  // first server snapshot may still replace it.
+  bool _showingCachedProfile = false;
+
+  DocumentReference<Map<String, dynamic>> _userDoc(String uid) =>
+      FirestoreDb.instance.collection('users').doc(uid);
+
   Future<void> _onAuthStateChanged(User? firebaseUser) async {
+    if (firebaseUser?.uid != _watchedUid) _stopProfileWatch();
+    if (firebaseUser?.uid != _disabledWatchUid) _stopDisabledWatch();
     if (firebaseUser == null) {
       userNotifier.value = null;
       return;
     }
-    if (userNotifier.value?.uid == firebaseUser.uid) return;
+    final shown = userNotifier.value;
+    // Already have this fan's real profile. A placeholder doesn't count.
+    if (shown != null && shown.uid == firebaseUser.uid && !shown.isPlaceholder) {
+      return;
+    }
+    final DocumentSnapshot<Map<String, dynamic>> doc;
     try {
-      final doc = await FirestoreDb.instance
-          .collection('users')
-          .doc(firebaseUser.uid)
-          .get();
-      if (doc.exists) {
-        userNotifier.value = UserData.fromMap(doc.data()!, firebaseUser.uid);
-        XpService.instance.award(XpAction.dailyOpen);
-      } else if (_googleSignInInProgress || userNotifier.value?.uid == firebaseUser.uid) {
-        // signInWithGoogle / register() is creating this profile itself.
-        return;
-      } else {
-        final name = firebaseUser.displayName ??
-            firebaseUser.email!.split('@').first;
-        final userData = UserData(
-          uid: firebaseUser.uid,
-          name: name,
-          email: firebaseUser.email!,
-          role: 'fan',
-        );
-        userNotifier.value = userData;
-        FirestoreDb.instance
-            .collection('users')
-            .doc(firebaseUser.uid)
-            .set(userData.toMap())
-            .catchError((_) {});
+      doc = await _userDoc(firebaseUser.uid).get();
+    } catch (e) {
+      debugPrint('Profile load failed for ${firebaseUser.uid}: $e');
+      // Offline / transient: use the cached copy if there is one, and keep
+      // listening so the real doc replaces it (or the placeholder) later.
+      try {
+        final cached = await _userDoc(firebaseUser.uid)
+            .get(const GetOptions(source: Source.cache));
+        final data = cached.data();
+        if (cached.exists && data != null) {
+          _publishProfile(firebaseUser.uid, data, fromCache: true);
+        }
+      } catch (_) {}
+      _watchProfile(firebaseUser);
+      return;
+    }
+    _stopProfileWatch(); // a retry succeeded
+    final data = doc.data();
+    if (doc.exists && data != null) {
+      _publishProfile(firebaseUser.uid, data, fromCache: false);
+    } else {
+      await _createMissingProfile(firebaseUser);
+    }
+  }
+
+  /// Publishes a loaded users/{uid} doc, unless it would replace newer
+  /// in-memory state (a real, server-confirmed profile for the same fan).
+  void _publishProfile(String uid, Map<String, dynamic> data,
+      {required bool fromCache}) {
+    if (FirebaseAuth.instance.currentUser?.uid != uid) return;
+    final shown = userNotifier.value;
+    final firstLoad =
+        shown == null || shown.uid != uid || shown.isPlaceholder;
+    if (!firstLoad && !(_showingCachedProfile && !fromCache)) return;
+    if (data['disabled'] == true) {
+      _signOutDisabled();
+      return;
+    }
+    _showingCachedProfile = fromCache;
+    userNotifier.value = UserData.fromMap(data, uid);
+    _watchDisabled(uid);
+    if (firstLoad) XpService.instance.award(XpAction.dailyOpen);
+  }
+
+  // ── Deactivated accounts ──────────────────────────────────────────────────
+
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _disabledSub;
+  String? _disabledWatchUid;
+
+  /// Signs the fan out the moment an admin deactivates them mid-session.
+  void _watchDisabled(String uid) {
+    if (_disabledWatchUid == uid && _disabledSub != null) return;
+    _disabledSub?.cancel();
+    _disabledWatchUid = uid;
+    _disabledSub = _userDoc(uid).snapshots().listen((snap) {
+      if (snap.data()?['disabled'] == true &&
+          FirebaseAuth.instance.currentUser?.uid == uid) {
+        _signOutDisabled();
       }
-    } catch (_) {
-      final name = firebaseUser.displayName ??
-          firebaseUser.email!.split('@').first;
-      userNotifier.value = UserData(
-        uid: firebaseUser.uid,
-        name: name,
-        email: firebaseUser.email!,
-        role: 'fan',
-      );
+    }, onError: (Object e) => debugPrint('Account status listen failed: $e'));
+  }
+
+  void _stopDisabledWatch() {
+    _disabledSub?.cancel();
+    _disabledSub = null;
+    _disabledWatchUid = null;
+  }
+
+  bool _showingDisabledNotice = false;
+
+  Future<void> _signOutDisabled() async {
+    _stopDisabledWatch();
+    await signOut();
+    final context = NotificationService.navigatorKey.currentContext;
+    if (context == null || !context.mounted || _showingDisabledNotice) return;
+    _showingDisabledNotice = true;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Account deactivated'),
+        content: Text(
+          'Your account has been deactivated by the ${AppInfo.appName} team, '
+          'so you have been signed out. You can still browse as a guest.\n\n'
+          'If you think this is a mistake, contact us'
+          '${AppInfo.supportEmail == null ? ' from Contact Us' : ' at ${AppInfo.supportEmail}'}.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+        ],
+      ),
+    );
+    _showingDisabledNotice = false;
+  }
+
+  /// The profile couldn't be read from the server: listen to users/{uid}
+  /// until a server snapshot arrives, retrying on errors. If nothing at all
+  /// is shown after [_placeholderDelay], publish a placeholder (see
+  /// UserData.isPlaceholder) so the app opens instead of hanging.
+  void _watchProfile(User firebaseUser) {
+    final uid = firebaseUser.uid;
+    _stopProfileWatch();
+    _watchedUid = uid;
+    if (userNotifier.value?.uid != uid) {
+      _placeholderTimer = Timer(_placeholderDelay, () {
+        if (_watchedUid != uid || userNotifier.value?.uid == uid) return;
+        if (FirebaseAuth.instance.currentUser?.uid != uid) return;
+        userNotifier.value = UserData(
+          uid: uid,
+          name: firebaseUser.displayName ??
+              (firebaseUser.email ?? '').split('@').first,
+          email: firebaseUser.email ?? '',
+          isPlaceholder: true,
+        );
+      });
+    }
+    _profileSub = _userDoc(uid).snapshots().listen((snap) {
+      if (_watchedUid != uid) return;
+      final data = snap.data();
+      if (snap.exists && data != null) {
+        _publishProfile(uid, data, fromCache: snap.metadata.isFromCache);
+        if (!snap.metadata.isFromCache) _stopProfileWatch();
+      } else if (!snap.metadata.isFromCache) {
+        // The server confirms there's no profile doc: create one.
+        _stopProfileWatch();
+        _createMissingProfile(firebaseUser);
+      }
+    }, onError: (Object e) {
+      debugPrint('Profile listen failed for $uid: $e');
+      _profileSub?.cancel();
+      _profileSub = null;
+      _retryTimer?.cancel();
+      _retryTimer = Timer(_profileRetryDelay, () {
+        if (_watchedUid == uid &&
+            FirebaseAuth.instance.currentUser?.uid == uid) {
+          _onAuthStateChanged(FirebaseAuth.instance.currentUser);
+        }
+      });
+    });
+  }
+
+  void _stopProfileWatch() {
+    _profileSub?.cancel();
+    _profileSub = null;
+    _placeholderTimer?.cancel();
+    _placeholderTimer = null;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _watchedUid = null;
+  }
+
+  /// Signed in, but the server has no users/{uid} doc (e.g. created in the
+  /// console): create the default fan profile.
+  Future<void> _createMissingProfile(User firebaseUser) async {
+    final shown = userNotifier.value;
+    if (_profileCreationInProgress ||
+        (shown != null && shown.uid == firebaseUser.uid && !shown.isPlaceholder)) {
+      // signInWithGoogle / register() is creating this profile itself.
+      return;
+    }
+    final userData = UserData(
+      uid: firebaseUser.uid,
+      name: firebaseUser.displayName ??
+          (firebaseUser.email ?? '').split('@').first,
+      email: firebaseUser.email ?? '',
+      role: 'fan',
+    );
+    try {
+      await _writeNewProfile(userData);
+    } catch (e) {
+      // Nothing to overwrite (the doc doesn't exist), so still show the
+      // default profile; onboarding writes the interests afterwards.
+      debugPrint('Creating profile for ${firebaseUser.uid} failed: $e');
+    }
+    if (FirebaseAuth.instance.currentUser?.uid != firebaseUser.uid) return;
+    _showingCachedProfile = false;
+    userNotifier.value = userData;
+  }
+
+  /// Writes a brand-new profile doc. A timeout is accepted (the write stays
+  /// queued offline); a real failure (e.g. permission-denied) throws.
+  Future<void> _writeNewProfile(UserData userData) async {
+    try {
+      await _userDoc(userData.uid)
+          .set(userData.toMap())
+          .timeout(_profileWriteTimeout);
+    } on TimeoutException {
+      debugPrint('Profile write for ${userData.uid} queued (offline?)');
     }
   }
 
@@ -226,9 +428,9 @@ class AuthService {
     );
   }
 
-  // True while signInWithGoogle is signing in, so _onAuthStateChanged
-  // doesn't race it to create a first-time Google user's profile.
-  bool _googleSignInInProgress = false;
+  // True while signInWithGoogle / register() are signing in, so
+  // _onAuthStateChanged doesn't race them to create a new user's profile.
+  bool _profileCreationInProgress = false;
 
   /// Returns true if signed in, false if the user closed the Google account
   /// picker. Throws on real failures (see LoginScreen for the messages).
@@ -243,7 +445,7 @@ class AuthService {
     );
 
     final pending = await FirstRunService.instance.readPending();
-    _googleSignInInProgress = true;
+    _profileCreationInProgress = true;
     try {
       final result = await FirebaseAuth.instance.signInWithCredential(credential);
       final user = result.user!;
@@ -260,39 +462,59 @@ class AuthService {
           categories: pending?.categories ?? const [],
           badge: pending?.badge ?? '',
         );
+        _showingCachedProfile = false;
         userNotifier.value = userData;
-        await FirestoreDb.instance.collection('users').doc(user.uid).set(userData.toMap());
+        await _writeNewProfile(userData);
         if (pending != null) await FirstRunService.instance.clearPending();
       }
     } finally {
-      _googleSignInInProgress = false;
+      _profileCreationInProgress = false;
     }
     return true;
   }
 
+  /// Creates the auth account and its users/{uid} profile. Throws if either
+  /// fails; a failed profile write undoes the sign-up (deletes the new auth
+  /// user, or at least signs out) so the fan can simply try again.
   Future<void> register({
     required String email,
     required String password,
     required String name,
   }) async {
-    final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
-    final displayName =
-        name.trim().isNotEmpty ? name.trim() : email.split('@').first;
-    final userData = UserData(
-      uid: cred.user!.uid,
-      name: displayName,
-      email: email.trim(),
-      role: 'fan',
-    );
-    userNotifier.value = userData;
-    FirestoreDb.instance
-        .collection('users')
-        .doc(cred.user!.uid)
-        .set(userData.toMap())
-        .catchError((_) {});
+    _profileCreationInProgress = true;
+    try {
+      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      final user = cred.user!;
+      final displayName =
+          name.trim().isNotEmpty ? name.trim() : email.split('@').first;
+      final userData = UserData(
+        uid: user.uid,
+        name: displayName,
+        email: email.trim(),
+        role: 'fan',
+      );
+      _showingCachedProfile = false;
+      userNotifier.value = userData;
+      try {
+        await _writeNewProfile(userData);
+      } catch (e) {
+        debugPrint('Profile write for ${user.uid} failed, undoing sign-up: $e');
+        userNotifier.value = null;
+        try {
+          await user.delete();
+        } catch (_) {
+          try {
+            await FirebaseAuth.instance.signOut();
+          } catch (_) {}
+        }
+        rethrow;
+      }
+    } finally {
+      _profileCreationInProgress = false;
+    }
   }
 
   Future<void> signOut() async {

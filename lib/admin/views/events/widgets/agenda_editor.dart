@@ -22,7 +22,9 @@ Future<DateTime?> pickEventDateTime(
         child: child!,
       );
   final firstDay = _day(first);
-  final lastDay = _day(last);
+  var lastDay = _day(last);
+  // showDatePicker asserts first <= last; never hand it an inverted range.
+  if (lastDay.isBefore(firstDay)) lastDay = firstDay;
   var initialDay = _day(initial);
   if (initialDay.isBefore(firstDay)) initialDay = firstDay;
   if (initialDay.isAfter(lastDay)) initialDay = lastDay;
@@ -117,6 +119,9 @@ class AgendaEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sorted = sortSessions(sessions);
+    // Sessions must fit inside the event; with end <= start there is no
+    // valid range to offer, so adding is blocked until the end is fixed.
+    final validRange = eventEnd.isAfter(eventStart);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -128,14 +133,21 @@ class AgendaEditor extends StatelessWidget {
           ),
         for (final s in sorted) _row(context, s),
         OutlinedButton.icon(
-          onPressed: () => _edit(context),
+          onPressed: validRange ? () => _edit(context) : null,
           style: OutlinedButton.styleFrom(
-            side: const BorderSide(color: AppTheme.pink),
+            side: BorderSide(color: validRange ? AppTheme.pink : AppTheme.border),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
-          icon: const Icon(Icons.add, color: AppTheme.pink, size: 16),
-          label: Text('Add session', style: AppTheme.inter(size: 12, color: AppTheme.pink)),
+          icon: Icon(Icons.add, color: validRange ? AppTheme.pink : Colors.grey, size: 16),
+          label: Text('Add session',
+              style: AppTheme.inter(size: 12, color: validRange ? AppTheme.pink : Colors.grey)),
         ),
+        if (!validRange)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text('Set a valid end time first',
+                style: AppTheme.inter(size: 10, color: Colors.redAccent)),
+          ),
       ],
     );
   }

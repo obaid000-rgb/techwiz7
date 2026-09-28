@@ -12,14 +12,17 @@ class AppInfo {
 
   // ── Contact details (null = not published yet) ─────────────────────────────
   static const String teamName = 'The Fandom Verse Team';
-  static const String? supportEmail = null; // e.g. 'support@yourdomain.com'
-  static const String? phone = null; // e.g. '+92 300 0000000'
-  static const String? workingHours = null; // e.g. 'Mon–Fri, 9:00–17:00 (PKT)'
+  static const String? supportEmail = 'fluttersquad78@gmail.com';
+  static const String? phone = '+92 300 1234567'; // DEMO number, not real
+  static const String? workingHours = 'Mon–Sat, 9:00 AM – 9:00 PM (PKT)';
 
-  // ── Office location (null = not published yet) ─────────────────────────────
-  static const String? officeAddress = null; // e.g. 'Street, Area, City, Country'
-  static const double? officeLatitude = null; // e.g. 24.8607
-  static const double? officeLongitude = null; // e.g. 67.0011
+  // ── Office location (Contact Us map) ───────────────────────────────────────
+  // Aptech Learning, Shahrah-e-Faisal Center, Karachi.
+  // Nullable on purpose: set back to null to show "coming soon".
+  // ignore_for_file: unnecessary_nullable_for_final_variable_declarations
+  static const String? officeAddress = 'Aptech Learning, Shahrah-e-Faisal Center, Karachi, Pakistan';
+  static const double? officeLatitude = 24.8627;
+  static const double? officeLongitude = 67.0716;
 
   // ── About Us copy (describes only what the app really does) ────────────────
   static const String story =
@@ -32,27 +35,10 @@ class AppInfo {
       'enough for experts, and connected to the real-world events and '
       'merchandise that bring fans together.';
 
-  // ── Team (placeholders — replace with your real team) ──────────────────────
-  /// `photoUrl` can stay null; an initial is shown instead.
-  static const List<TeamMember> team = [
-    TeamMember(name: 'Team Member', role: 'Role', isPlaceholder: true),
-    TeamMember(name: 'Team Member', role: 'Role', isPlaceholder: true),
-    TeamMember(name: 'Team Member', role: 'Role', isPlaceholder: true),
-  ];
+  // Team members for About Us live in Firestore (`teamMembers`), managed in
+  // the admin panel under "About Us Team".
 
   static bool get hasOfficeCoordinates => officeLatitude != null && officeLongitude != null;
   static bool get hasOfficeLocation => officeAddress != null || hasOfficeCoordinates;
 }
 
-class TeamMember {
-  final String name;
-  final String role;
-  final String? photoUrl;
-  final bool isPlaceholder;
-  const TeamMember({
-    required this.name,
-    required this.role,
-    this.photoUrl,
-    this.isPlaceholder = false,
-  });
-}

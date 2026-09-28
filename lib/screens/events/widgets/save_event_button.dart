@@ -80,13 +80,27 @@ class SaveEventIconButton extends StatelessWidget {
 /// Full-width "Save to My Agenda" button on Event Detail.
 class SaveEventButton extends StatelessWidget {
   final EventItem event;
-  const SaveEventButton({super.key, required this.event});
+  /// The event has ended: a fan can still remove it from My Agenda, but
+  /// can no longer add it.
+  final bool closed;
+  const SaveEventButton({super.key, required this.event, this.closed = false});
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<UserData?>(
         valueListenable: AuthService.instance.userNotifier,
         builder: (context, user, _) {
           final saved = user?.savedEventIds.contains(event.id) ?? false;
+          if (closed && !saved) {
+            return SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: null,
+                icon: const Icon(Icons.event_busy_outlined, color: Colors.grey, size: 20),
+                label: Text('This event has ended',
+                    style: AppTheme.inter(size: 13, weight: FontWeight.w700, color: Colors.grey)),
+              ),
+            );
+          }
           return SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(

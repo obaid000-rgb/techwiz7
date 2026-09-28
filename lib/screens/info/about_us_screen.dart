@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../config/app_info.dart';
+import '../../models/team_member.dart';
+import '../../services/team_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_logo.dart';
 import 'contact_us_screen.dart';
 import 'widgets/info_ui.dart';
 
@@ -20,7 +23,7 @@ class AboutUsScreen extends StatelessWidget {
     (Icons.notifications_active_outlined, 'Price Alerts',
         'Wishlist an item and get notified when its price goes up or down.'),
     (Icons.download_for_offline_outlined, 'Read Offline',
-        'Save posts to your phone and read them without a connection.'),
+        'Bookmark a post to save it on your phone and read it without a connection.'),
     (Icons.smart_toy_outlined, 'AI Help',
         'An in-app assistant that explains how every feature works.'),
   ];
@@ -79,7 +82,7 @@ class AboutUsScreen extends StatelessWidget {
           delay: const Duration(milliseconds: 420),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const InfoSectionHeading(eyebrow: 'THE PEOPLE', title: 'Meet the Team'),
-            ResponsiveGrid(minItemWidth: 140, children: [for (final m in AppInfo.team) _TeamCard(member: m)]),
+            const _TeamSection(),
           ]),
         ),
         const SizedBox(height: 32),
@@ -110,22 +113,7 @@ class _Hero extends StatelessWidget {
       child: Column(
         children: [
           // Same logo mark as the app's top bar.
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: const LinearGradient(
-                colors: [AppTheme.accent, AppTheme.cyan],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [BoxShadow(color: AppTheme.accent.withValues(alpha: 0.6), blurRadius: 30)],
-            ),
-            alignment: Alignment.center,
-            child: Text('F',
-                style: GoogleFonts.orbitron(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 38)),
-          ),
+          const AppLogo(size: 72),
           const SizedBox(height: 20),
           FittedBox(
             fit: BoxFit.scaleDown,
@@ -172,6 +160,52 @@ class _FeatureCard extends StatelessWidget {
   }
 }
 
+/// "Meet the Team", loaded live from Firestore (managed in admin).
+class _TeamSection extends StatefulWidget {
+  const _TeamSection();
+
+  @override
+  State<_TeamSection> createState() => _TeamSectionState();
+}
+
+class _TeamSectionState extends State<_TeamSection> {
+  late final Stream<List<TeamMember>> _team = TeamService.instance.watchAll();
+
+  Widget _note(IconData icon, String text) => GlassCard(
+        child: Row(children: [
+          GlowIcon(icon, size: 36, muted: true),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(text, style: AppTheme.inter(size: 13, color: AppTheme.textSecondary, height: 1.4)),
+          ),
+        ]),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<TeamMember>>(
+      stream: _team,
+      builder: (context, snap) {
+        if (snap.hasError) {
+          debugPrint('About Us team load error: ${snap.error}');
+          return _note(Icons.cloud_off_rounded, 'Couldn\'t load the team right now. Check your connection.');
+        }
+        if (!snap.hasData) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 28),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: InfoColors.lavender)),
+          );
+        }
+        final team = snap.data!;
+        if (team.isEmpty) {
+          return _note(Icons.groups_2_outlined, 'Our team will be introduced here soon.');
+        }
+        return ResponsiveGrid(minItemWidth: 140, children: [for (final m in team) _TeamCard(member: m)]);
+      },
+    );
+  }
+}
+
 class _TeamCard extends StatelessWidget {
   final TeamMember member;
   const _TeamCard({required this.member});
@@ -179,6 +213,7 @@ class _TeamCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final initial = member.name.trim().isEmpty ? '?' : member.name.trim()[0].toUpperCase();
+    final photo = member.imageUrl.isEmpty ? null : member.imageUrl;
     return GlassCard(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
       child: Column(children: [
@@ -192,8 +227,9 @@ class _TeamCard extends StatelessWidget {
           child: CircleAvatar(
             radius: 34,
             backgroundColor: InfoColors.deepPurple,
-            backgroundImage: member.photoUrl != null ? NetworkImage(member.photoUrl!) : null,
-            child: member.photoUrl == null
+            backgroundImage: photo != null ? NetworkImage(photo) : null,
+            onBackgroundImageError: photo != null ? (e, s) {} : null,
+            child: photo == null
                 ? Text(initial, style: AppTheme.orbitron(size: 22, weight: FontWeight.w900, color: InfoColors.lavender))
                 : null,
           ),
@@ -210,6 +246,14 @@ class _TeamCard extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: AppTheme.inter(size: 12, weight: FontWeight.w600, color: AppTheme.pink)),
+        if (member.bio.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(member.bio,
+              textAlign: TextAlign.center,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: AppTheme.inter(size: 12, color: AppTheme.textSecondary, height: 1.4)),
+        ],
       ]),
     );
   }

@@ -4,6 +4,7 @@ import '../../models/app_category.dart';
 import '../../models/glossary_term.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/category_icons.dart';
+import '../../widgets/category_name.dart' show prettifyCategoryKey;
 import 'category_detail_screen.dart';
 
 /// Detail view for one glossary term: full definition, its category (tap to
@@ -111,7 +112,7 @@ class GlossaryTermScreen extends StatelessWidget {
                   _categoryTile(context, category),
                   if (related.isNotEmpty) ...[
                     const SizedBox(height: 24),
-                    _label('MORE FROM ${(category?.name ?? term.category).toUpperCase()}'),
+                    _label('MORE FROM ${category?.name.toUpperCase() ?? prettifyCategoryKey(term.category)}'),
                     const SizedBox(height: 10),
                     Wrap(
                       spacing: 8,
@@ -157,7 +158,7 @@ class GlossaryTermScreen extends StatelessWidget {
           'Used across many fandoms.');
     }
     if (category == null) {
-      return _plainTile(Icons.category_outlined, term.category, 'This category is no longer available.');
+      return _plainTile(Icons.category_outlined, prettifyCategoryKey(term.category), 'This category is no longer available.');
     }
     return Material(
       color: Colors.transparent,

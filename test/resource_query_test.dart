@@ -1,4 +1,5 @@
 import 'package:fandom_verse/logic/resource_query.dart';
+import 'package:fandom_verse/models/creator.dart';
 import 'package:fandom_verse/models/fandom.dart';
 import 'package:fandom_verse/models/post.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -75,9 +76,6 @@ void main() {
     test('creator', () {
       expect(run(const ResourceFilter(creatorIds: {'pod'})), ['p1']);
     });
-    test('tag (normalized)', () {
-      expect(run(const ResourceFilter(tags: {'Trailer'})), ['v1', 'p1']);
-    });
   });
 
   group('combining', () {
@@ -102,10 +100,10 @@ void main() {
       const f = ResourceFilter(
           types: {'Video'}, creatorIds: {'a', 'b'}, sort: ResourceSort.trending);
       expect(f.activeCount, 4);
-      final g = f.copyWith(myInterestsOnly: true, tags: {'x'});
-      expect(g.activeCount, 6);
+      final g = f.copyWith(myInterestsOnly: true);
+      expect(g.activeCount, 5);
       expect(g.types, {'Video'});
-      expect(g.copyWith(query: 'hi').activeCount, 6);
+      expect(g.copyWith(query: 'hi').activeCount, 5);
       expect(g.copyWith(query: 'hi').isEmpty, isFalse);
     });
   });
@@ -122,14 +120,14 @@ void main() {
       expect(run(const ResourceFilter(query: 'free fire')), ['n1']);
     });
     test('ranking: title matches first, overrides chosen sort', () {
-      // v1: title+tag+fandom on "naruto"(3+0+2) and "trailer"(3+2) = 10
-      // p1: body only "naruto"(1), tag+body "trailer"(2+1) = 4
+      // v1: title+fandom on "naruto" (3+2) and title on "trailer" (3) = 8
+      // p1: body only on both words (1+1) = 2
       expect(
           run(const ResourceFilter(
               query: 'naruto trailer', sort: ResourceSort.mostViewed)),
           ['v1', 'p1']);
       final p = posts.firstWhere((x) => x.id == 'v1');
-      expect(searchScore(p, queryWords('naruto trailer')), 10);
+      expect(searchScore(p, queryWords('naruto trailer')), 8);
       expect(searchScore(p, queryWords('zzz')), isNull);
     });
     test('creator name and tags are searchable', () {
@@ -163,13 +161,6 @@ void main() {
       // g1 has the most views but is 20 days old; v1 is 1 day old
       expect(run(const ResourceFilter(sort: ResourceSort.trending)).first, 'v1');
     });
-    test('trending tags: last 14 days only, pinned first, then by score', () {
-      final tags = computeTrendingTags(posts, ['cosplay', 'Patch Notes'], now);
-      expect(tags.take(2).toSet(), {'cosplay', 'patch-notes'});
-      expect(tags.sublist(2), ['trailer']); // cosplay's only post is 20 days old
-      expect(computeTrendingTags(posts, const [], now), ['trailer', 'patch-notes']);
-      expect(computeTrendingTags(posts, const [], now, limit: 1), ['trailer']);
-    });
   });
 
   test('matchFandoms by name or tag prefix', () {
@@ -187,5 +178,20 @@ void main() {
     expect(matchFandoms(fandoms, 'free fire naruto').map((f) => f.id), ['ff', 'naruto']);
     expect(matchFandoms(fandoms, 'zzz'), isEmpty);
     expect(matchFandoms(fandoms, ''), isEmpty);
+  });
+
+  test('matchCreators: name prefix, active only, best match first', () {
+    Creator cr(String id, String name, {bool active = true}) =>
+        Creator(id: id, name: name, isActive: active, createdAt: DateTime(2026));
+    final creators = [
+      cr('shezz', 'Shezz Reviews'),
+      cr('otaku', 'Otaku Pod'),
+      cr('gone', 'Shez Old', active: false),
+    ];
+    expect(matchCreators(creators, 'shez').map((c) => c.id), ['shezz']);
+    expect(matchCreators(creators, 'SHEZZ reviews').first.id, 'shezz');
+    expect(matchCreators(creators, 'pod').map((c) => c.id), ['otaku']);
+    expect(matchCreators(creators, ''), isEmpty);
+    expect(matchCreators(creators, 'zzz'), isEmpty);
   });
 }

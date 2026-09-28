@@ -24,10 +24,19 @@ class CategoryService {
     return s.docs.map((d) => AppCategory.fromMap(d.data(), d.id)).toList();
   }
 
-  Future<void> addCategory(AppCategory cat) => FirestoreDb.instance
-      .collection('categories')
-      .doc(cat.key)
-      .set(cat.toMap());
+  /// Valid category keys: lowercase letters, digits and underscores.
+  static final keyPattern = RegExp(r'^[a-z0-9_]+$');
+
+  /// Creates categories/{key} only if no category already uses that key.
+  /// Returns false (and writes nothing) when the key is taken, so an
+  /// existing category can never be silently overwritten.
+  Future<bool> addCategory(AppCategory cat) =>
+      FirestoreDb.instance.runTransaction((tx) async {
+        final ref = FirestoreDb.instance.collection('categories').doc(cat.key);
+        if ((await tx.get(ref)).exists) return false;
+        tx.set(ref, cat.toMap());
+        return true;
+      });
 
   Future<void> updateCategory(AppCategory cat) async {
     final db = FirestoreDb.instance;
@@ -102,13 +111,26 @@ class CategoryService {
       FirestoreDb.instance
           .collection('fandoms')
           .where('categoryId', isEqualTo: key)
-          .where('isActive', isEqualTo: true)
           .get(),
     ]);
     return {
       'posts': results[0].docs.length,
       'merchandise': results[1].docs.length,
-      'fandoms': results[2].docs.length,
+      'fandoms': results[2].docs.where((d) => d.data()['isActive'] != false).length,
     };
+  }
+
+  /// Soft-deletes (isActive: false) every fandom in category [key], so the
+  /// category can be deleted; the fandoms stay restorable from Fandoms.
+  Future<void> deactivateFandomsIn(String key) async {
+    final snap = await FirestoreDb.instance
+        .collection('fandoms')
+        .where('categoryId', isEqualTo: key)
+        .get();
+    final batch = FirestoreDb.instance.batch();
+    for (final d in snap.docs) {
+      if (d.data()['isActive'] != false) batch.update(d.reference, {'isActive': false});
+    }
+    await batch.commit();
   }
 }

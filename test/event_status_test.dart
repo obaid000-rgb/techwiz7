@@ -159,4 +159,57 @@ void main() {
     expect(e.address, '');
     expect(e.organizerName, '');
   });
+
+  group('user-side status labels (from the current time)', () {
+    final now = DateTime(2026, 9, 28, 12);
+    test('past event -> CLOSED', () {
+      final e = _event(start: DateTime(2026, 9, 20, 10), end: DateTime(2026, 9, 21, 18));
+      expect(eventStatusLabel(e.statusAt(now)), 'CLOSED');
+    });
+    test('running event -> NOW', () {
+      final e = _event(start: DateTime(2026, 9, 27, 10), end: DateTime(2026, 9, 29, 18));
+      expect(eventStatusLabel(e.statusAt(now)), 'NOW');
+    });
+    test('future event -> COMING SOON', () {
+      final e = _event(start: DateTime(2026, 10, 5, 10));
+      expect(eventStatusLabel(e.statusAt(now)), 'COMING SOON');
+    });
+    test('status changes on its own as time passes', () {
+      final e = _event(start: DateTime(2026, 9, 28, 14), end: DateTime(2026, 9, 28, 16));
+      expect(eventStatusLabel(e.statusAt(DateTime(2026, 9, 28, 13, 59))), 'COMING SOON');
+      expect(eventStatusLabel(e.statusAt(DateTime(2026, 9, 28, 14))), 'NOW');
+      expect(eventStatusLabel(e.statusAt(DateTime(2026, 9, 28, 16))), 'CLOSED');
+    });
+  });
+
+  group('validateEventTiming (admin form)', () {
+    final now = DateTime(2026, 9, 28, 12);
+    test('new event starting in the past is rejected', () {
+      expect(validateEventTiming(start: DateTime(2026, 9, 28, 11, 59), end: null, now: now),
+          'The start date and time cannot be in the past.');
+      expect(validateEventTiming(start: DateTime(2026, 9, 28, 12, 1), end: null, now: now), isNull);
+    });
+    test('end before or equal to start is rejected', () {
+      final start = DateTime(2026, 10, 1, 10);
+      expect(validateEventTiming(start: start, end: start, now: now), 'End time must be after the start time.');
+      expect(validateEventTiming(start: start, end: DateTime(2026, 10, 1, 9), now: now),
+          'End time must be after the start time.');
+      expect(validateEventTiming(start: start, end: DateTime(2026, 10, 1, 18), now: now), isNull);
+    });
+    test('missing start is rejected', () {
+      expect(validateEventTiming(start: null, end: null, now: now), 'Choose a start date and time.');
+    });
+    test('a running event can be edited if its dates are unchanged', () {
+      final start = DateTime(2026, 9, 27, 10);
+      final end = DateTime(2026, 9, 29, 18);
+      expect(
+          validateEventTiming(
+              start: start, end: end, now: now, isNew: false, previousStart: start, previousEnd: end),
+          isNull);
+      expect(
+          validateEventTiming(
+              start: DateTime(2026, 9, 26, 10), end: end, now: now, isNew: false, previousStart: start, previousEnd: end),
+          'The start date and time cannot be in the past.');
+    });
+  });
 }

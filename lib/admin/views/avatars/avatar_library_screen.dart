@@ -184,12 +184,29 @@ class _AvatarFormDialog extends StatefulWidget {
 
 class _AvatarFormDialogState extends State<_AvatarFormDialog> {
   late String _imageUrl = widget.existing?.imageUrl ?? '';
-  late String _categoryId = widget.existing?.categoryId ?? AvatarLibraryItem.general;
+  late String _categoryId;
   late bool _active = widget.existing?.isActive ?? true;
   bool _saving = false;
+  bool _imageBusy = false;
   String? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    // A deleted/unknown category would leave the dropdown showing General
+    // while saving the stale key; normalize so what's shown is what's saved.
+    final id = widget.existing?.categoryId ?? AvatarLibraryItem.general;
+    _categoryId = id == AvatarLibraryItem.general ||
+            widget.categories.any((c) => c.key == id)
+        ? id
+        : AvatarLibraryItem.general;
+  }
+
   Future<void> _save() async {
+    if (_imageBusy) {
+      setState(() => _error = 'Wait for the image to finish uploading.');
+      return;
+    }
     if (_imageUrl.isEmpty) {
       setState(() => _error = 'Upload an image first.');
       return;
@@ -220,8 +237,6 @@ class _AvatarFormDialogState extends State<_AvatarFormDialog> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.existing != null;
-    final validCategory = _categoryId == AvatarLibraryItem.general ||
-        widget.categories.any((c) => c.key == _categoryId);
     return AlertDialog(
       backgroundColor: AppTheme.card,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -246,15 +261,26 @@ class _AvatarFormDialogState extends State<_AvatarFormDialog> {
               else
                 ImageUploadField(
                   onUploaded: (url) => setState(() => _imageUrl = url),
+                  onBusyChanged: (busy) {
+                    if (mounted) setState(() => _imageBusy = busy);
+                  },
                   accentColor: AppTheme.cyan,
                   isCircular: true,
                   circleRadius: 48,
+                ),
+              if (_imageBusy)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Center(
+                    child: Text('Wait for the image to finish uploading',
+                        style: AppTheme.inter(size: 11, color: Colors.grey)),
+                  ),
                 ),
               const SizedBox(height: 16),
               Text('Category', style: AppTheme.inter(size: 12, color: Colors.grey)),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
-                initialValue: validCategory ? _categoryId : AvatarLibraryItem.general,
+                initialValue: _categoryId,
                 dropdownColor: AppTheme.card,
                 isExpanded: true,
                 style: AppTheme.inter(size: 13, color: Colors.white),
@@ -292,7 +318,7 @@ class _AvatarFormDialogState extends State<_AvatarFormDialog> {
           child: Text('CANCEL', style: AppTheme.inter(size: 12, color: Colors.grey)),
         ),
         ElevatedButton(
-          onPressed: _saving ? null : _save,
+          onPressed: _saving || _imageBusy ? null : _save,
           style: ElevatedButton.styleFrom(backgroundColor: AppTheme.cyan),
           child: Text('SAVE', style: AppTheme.inter(size: 12, color: Colors.black, weight: FontWeight.w700)),
         ),

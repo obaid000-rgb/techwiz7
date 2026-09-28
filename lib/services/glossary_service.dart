@@ -21,4 +21,17 @@ class GlossaryService {
 
   Future<void> deleteTerm(String id) =>
       FirestoreDb.instance.collection('glossary').doc(id).delete();
+
+  /// True if another glossary entry already uses this term
+  /// (case-insensitive). Pass [excludeId] when editing so the term being
+  /// edited doesn't collide with itself.
+  Future<bool> termExists(String term, {String? excludeId}) async {
+    final s = await FirestoreDb.instance.collection('glossary').get();
+    final normalized = term.trim().toLowerCase();
+    return s.docs.any((d) {
+      if (excludeId != null && d.id == excludeId) return false;
+      final existing = (d.data()['term'] as String? ?? '').trim().toLowerCase();
+      return existing == normalized;
+    });
+  }
 }

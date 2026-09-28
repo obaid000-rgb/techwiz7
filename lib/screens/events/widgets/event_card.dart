@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../logic/event_status.dart';
 import '../../../models/event_item.dart';
 import '../../../theme/app_theme.dart';
+import '../../../utils/event_format.dart';
 import '../event_detail_screen.dart';
 import 'save_event_button.dart';
 
@@ -63,9 +64,8 @@ class EventCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Wrap(spacing: 6, runSpacing: 4, children: [
+                        EventStatusBadge(event: ev),
                         EventTypeChip(event: ev),
-                        if (ev.statusAt(DateTime.now()) == EventStatus.happeningNow)
-                          const HappeningNowBadge(),
                       ]),
                       const SizedBox(height: 6),
                       Text(ev.title,
@@ -73,6 +73,11 @@ class EventCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: AppTheme.inter(size: 15, weight: FontWeight.w600, height: 1.3)),
                       const SizedBox(height: 4),
+                      Text(formatEventRange(ev.date, ev.endAt),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.inter(size: 12, weight: FontWeight.w600, color: Colors.white70)),
+                      const SizedBox(height: 2),
                       Text(place,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -103,7 +108,7 @@ class EventCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                SaveEventIconButton(event: ev),
+                if (ev.statusAt(DateTime.now()) != EventStatus.ended) SaveEventIconButton(event: ev),
               ],
             ),
           ),
@@ -141,27 +146,49 @@ class EventTypeChip extends StatelessWidget {
   }
 }
 
-/// Green "Happening now" badge, shown while an event is on.
-class HappeningNowBadge extends StatelessWidget {
-  const HappeningNowBadge({super.key});
+/// Status badge worked out from the current time every time it builds:
+/// COMING SOON (cyan) before the start, NOW (green, with a live dot and
+/// "LIVE") while the event runs, CLOSED (grey) once it has ended.
+class EventStatusBadge extends StatelessWidget {
+  final EventItem event;
+  final bool large;
+  const EventStatusBadge({super.key, required this.event, this.large = false});
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.greenAccent.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.6)),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
+  Widget build(BuildContext context) {
+    final status = event.statusAt(DateTime.now());
+    final color = switch (status) {
+      EventStatus.upcoming => AppTheme.cyan,
+      EventStatus.happeningNow => Colors.greenAccent,
+      EventStatus.ended => Colors.grey,
+    };
+    final label = status == EventStatus.happeningNow ? 'NOW · LIVE' : eventStatusLabel(status);
+    final font = large ? 11.0 : 9.0;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: large ? 10 : 7, vertical: large ? 4 : 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: status == EventStatus.happeningNow ? 0.2 : 0.14),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.6)),
+        boxShadow: status == EventStatus.happeningNow
+            ? [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 10)]
+            : null,
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (status == EventStatus.happeningNow) ...[
           Container(
-            width: 6,
-            height: 6,
-            decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle),
+            width: font * 0.7,
+            height: font * 0.7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 4),
-          Text('HAPPENING NOW',
-              style: AppTheme.inter(size: 9, weight: FontWeight.w700, color: Colors.greenAccent)),
-        ]),
-      );
+        ] else ...[
+          Icon(status == EventStatus.upcoming ? Icons.schedule_rounded : Icons.lock_clock_outlined,
+              size: font + 2, color: color),
+          const SizedBox(width: 3),
+        ],
+        Text(label, style: AppTheme.inter(size: font, weight: FontWeight.w800, color: color)),
+      ]),
+    );
+  }
 }

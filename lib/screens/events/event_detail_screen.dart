@@ -7,10 +7,11 @@ import '../../models/event_session.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/event_format.dart';
 import '../../utils/url_utils.dart';
+import '../../widgets/category_name.dart';
 import '../../models/fandom.dart';
 import '../../services/fandom_service.dart';
 import '../fandoms/fandom_page_screen.dart';
-import 'widgets/event_card.dart' show EventTypeChip, HappeningNowBadge;
+import 'widgets/event_card.dart' show EventTypeChip, EventStatusBadge;
 import 'widgets/save_event_button.dart';
 import '../../services/event_service.dart';
 
@@ -78,7 +79,7 @@ class _EventDetailBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final happeningNow = event.statusAt(DateTime.now()) == EventStatus.happeningNow;
+    final closed = event.statusAt(DateTime.now()) == EventStatus.ended;
     final place = event.venue.isNotEmpty ? '${event.venue}, ${event.city}' : event.city;
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -134,14 +135,17 @@ class _EventDetailBody extends StatelessWidget {
                             color: AppTheme.pink,
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: Text(
-                            event.category.toUpperCase(),
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          child: CategoryName(
+                            categoryKey: event.category,
+                            builder: (_, label) => Text(
+                              label,
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
                       EventTypeChip(event: event),
-                      if (happeningNow) const HappeningNowBadge(),
+                      EventStatusBadge(event: event, large: true),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -167,7 +171,7 @@ class _EventDetailBody extends StatelessWidget {
                   const SizedBox(height: 12),
                   _infoRow(Icons.bookmark_border_rounded, interestedLabel(event.interestedCount)),
                   const SizedBox(height: 20),
-                  SaveEventButton(event: event),
+                  SaveEventButton(event: event, closed: closed),
                   if (event.sessions.isNotEmpty) ...[
                     const SizedBox(height: 28),
                     _EventAgenda(sessions: event.sessions),
@@ -205,7 +209,33 @@ class _EventDetailBody extends StatelessWidget {
         ],
       );
 
+  Widget _disabledTicket(IconData icon, String label, String note) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: null,
+              style: ElevatedButton.styleFrom(
+                disabledBackgroundColor: AppTheme.card,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              icon: Icon(icon, color: Colors.grey, size: 18),
+              label: Text(label,
+                  style: AppTheme.orbitron(size: 12, color: Colors.grey, weight: FontWeight.w800)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(note, style: AppTheme.inter(size: 11, color: Colors.grey)),
+        ],
+      );
+
   Widget _ticketButton(BuildContext context) {
+    if (event.statusAt(DateTime.now()) == EventStatus.ended) {
+      // The event is over: no tickets to buy.
+      return _disabledTicket(Icons.lock_clock_outlined, 'EVENT CLOSED', 'This event has ended.');
+    }
     if (offline) {
       return SizedBox(
         width: double.infinity,

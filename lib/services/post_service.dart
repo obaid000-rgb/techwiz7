@@ -118,6 +118,18 @@ class PostService {
           .snapshots()
           .map((s) => s.docs.map((d) => Post.fromMap(d.data(), d.id)).toList());
 
+  /// A creator's active posts, newest first: a single where on creatorId,
+  /// with the active filter and the sort done on the device.
+  Stream<List<Post>> watchPostsByCreator(String creatorId) => FirestoreDb.instance
+      .collection('posts')
+      .where('creatorId', isEqualTo: creatorId)
+      .snapshots()
+      .map((s) => s.docs
+          .map((d) => Post.fromMap(d.data(), d.id))
+          .where((p) => p.isActive)
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
+
   Stream<List<Post>> watchPostsByFandom(String fandomId) => FirestoreDb.instance
       .collection('posts')
       .where('fandomId', isEqualTo: fandomId)
@@ -128,11 +140,12 @@ class PostService {
               ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
       );
 
-  /// Creates or updates [post] and, in the same batch, creates a
-  /// tags/{slug} document for each entry of [newTags] (slug → display name)
-  /// that doesn't exist yet. Returns the post's document id.
-  Future<String> savePostWithTags(Post post, Map<String, String> newTags,
-      {required bool isNew}) async {
+  /// Creates or updates [post]. Returns the post's document id.
+  ///
+  /// [post].isFandomOfTheDay is written as-is. When it is true, every other
+  /// flagged post is unflagged in the SAME batch, so the save and the
+  /// "exactly zero or one Today's Fandom" rule commit together or not at all.
+  Future<String> savePost(Post post, {required bool isNew}) async {
     final db = FirestoreDb.instance;
     final posts = db.collection('posts');
     final ref = isNew ? posts.doc() : posts.doc(post.id);
@@ -144,13 +157,14 @@ class PostService {
       if (!post.hasVideo) data['youtubeUrl'] = FieldValue.delete();
       batch.update(ref, data);
     }
-    newTags.forEach((slug, name) {
-      batch.set(db.collection('tags').doc(slug), {
-        'name': name,
-        'isPinned': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    });
+    if (post.isFandomOfTheDay) {
+      final flagged =
+          await posts.where('isFandomOfTheDay', isEqualTo: true).get();
+      for (final doc in flagged.docs) {
+        if (doc.id == ref.id) continue;
+        batch.update(doc.reference, {'isFandomOfTheDay': false});
+      }
+    }
     await batch.commit();
     return ref.id;
   }

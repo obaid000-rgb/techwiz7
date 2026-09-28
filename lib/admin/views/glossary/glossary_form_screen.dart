@@ -50,6 +50,17 @@ class _GlossaryFormScreenState extends State<GlossaryFormScreen> {
     });
     try {
       final e = widget.existing;
+      final duplicate =
+          await GlossaryService.instance.termExists(term, excludeId: e?.id);
+      if (duplicate) {
+        if (mounted) {
+          setState(() {
+            _saving = false;
+            _error = 'The term "$term" is already in the glossary.';
+          });
+        }
+        return;
+      }
       if (e == null) {
         await GlossaryService.instance.addTerm(GlossaryTerm(
           id: '',

@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
+  # helper
 
     function isSignedIn() {
       return request.auth != null;
@@ -30,7 +30,11 @@ service cloud.firestore {
       // the app itself can never self-grant an admin role.
       // A new profile also starts at 0 XP, so nobody registers as Level 5.
       allow create: if isOwner(uid) && request.resource.data.role == 'fan'
-        && request.resource.data.get('xp', 0) == 0;
+        && request.resource.data.get('xp', 0) == 0
+        && request.resource.data.get('disabled', false) == false;
+      // Admin "Add user": an admin may create the profile document for the
+      // account they just created (another uid), with role fan or admin.
+      allow create: if isAdmin();
 
       // Owners can update any field EXCEPT role (prevents self-promotion)
       // and rank. XP rule: an owner's own write may leave xp unchanged or
@@ -39,6 +43,11 @@ service cloud.firestore {
       // Admins can update any field, including role and any xp value.
       allow update: if isAdmin() ||
                        (isOwner(uid)
+                        // "disabled" is admin-only (Users > Deactivate), and a
+                        // deactivated account can't edit its own profile.
+                        && resource.data.get('disabled', false) != true
+                        && request.resource.data.get('disabled', false)
+                             == resource.data.get('disabled', false)
                         && request.resource.data.role == resource.data.role
                         && request.resource.data.get('rank', null)
                              == resource.data.get('rank', null)
@@ -194,6 +203,29 @@ service cloud.firestore {
     match /avatarLibrary/{docId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // FAQs: shown on Contact Us (guests too) and fed to the AI helper.
+    match /faqs/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // About Us "Meet the Team": public (guests see About Us), admin-write.
+    match /teamMembers/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Backup & Export history: admins only.
+    match /backups/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Backup & Export reads every cart with a collectionGroup query; each
+    // fan's own cart rules are below and unchanged.
+    match /{path=**}/cart/{productId} {
+      allow read: if isAdmin();
     }
 
     // Read by the pre-login intro carousel, so it must be public.

@@ -8,6 +8,7 @@ import '../../../services/merchandise_service.dart';
 import '../../../services/order_service.dart';
 import '../../../services/post_service.dart';
 import '../../../services/user_service.dart';
+import '../../../services/backup_service.dart';
 import '../../../theme/app_theme.dart';
 import 'admin_shell.dart';
 import '../events/event_form_screen.dart';
@@ -70,6 +71,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     style: AppTheme.inter(size: 11, color: Colors.grey)),
                 const SizedBox(height: 16),
                 _PendingOrdersAlert(snap: orderSnap, onTap: () => _open('Orders')),
+                _BackupDueCard(onTap: () => _open('Backup')),
                 const SizedBox(height: 16),
                 _sectionLabel('QUICK ACTIONS'),
                 const SizedBox(height: 8),
@@ -547,5 +549,65 @@ class _RecentOrders extends StatelessWidget {
             ),
           ),
         ),
+      );
+}
+
+/// Shown when there has never been a backup, or the last one is more than
+/// 7 days old; tapping opens Backup & Export.
+class _BackupDueCard extends StatefulWidget {
+  final VoidCallback onTap;
+  const _BackupDueCard({required this.onTap});
+
+  @override
+  State<_BackupDueCard> createState() => _BackupDueCardState();
+}
+
+class _BackupDueCardState extends State<_BackupDueCard> {
+  late final Stream<BackupRecord?> _latest = BackupService.instance.watchLatest();
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<BackupRecord?>(
+        stream: _latest,
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting || snap.hasError) {
+            return const SizedBox.shrink();
+          }
+          final last = snap.data;
+          final due = last == null || DateTime.now().difference(last.exportedAt) > const Duration(days: 7);
+          if (!due) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Material(
+              color: AppTheme.orange.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: widget.onTap,
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppTheme.orange.withValues(alpha: 0.5)),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.backup_outlined, color: AppTheme.orange),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Backup due', style: AppTheme.inter(size: 14, weight: FontWeight.w700)),
+                        Text(
+                            last == null
+                                ? 'No backup has been made yet. Export your data now.'
+                                : 'Last backup was ${DateTime.now().difference(last.exportedAt).inDays} days ago.',
+                            style: AppTheme.inter(size: 12, color: Colors.white70)),
+                      ]),
+                    ),
+                    const Icon(Icons.chevron_right, color: AppTheme.orange),
+                  ]),
+                ),
+              ),
+            ),
+          );
+        },
       );
 }

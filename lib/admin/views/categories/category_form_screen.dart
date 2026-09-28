@@ -24,6 +24,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
   bool _saving = false;
   String? _error;
   bool _keyEdited = false;
+  bool _imageBusy = false;
 
   @override
   void initState() {
@@ -42,8 +43,9 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
     _nameCtr.addListener(() {
       if (!_keyEdited) {
         _keyCtr.text = _nameCtr.text
+            .trim()
             .toLowerCase()
-            .replaceAll(' ', '_')
+            .replaceAll(RegExp(r'\s+'), '_')
             .replaceAll(RegExp(r'[^a-z0-9_]'), '');
       }
     });
@@ -61,10 +63,29 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
   Future<void> _save() async {
     final name = _nameCtr.text.trim();
     final key = _keyCtr.text.trim();
-    final order = int.tryParse(_orderCtr.text.trim()) ?? 0;
+    final orderText = _orderCtr.text.trim();
+    final order = orderText.isEmpty ? 0 : int.tryParse(orderText);
 
-    if (name.isEmpty || key.isEmpty) {
-      setState(() => _error = 'Name and key are required.');
+    if (_imageBusy) {
+      setState(() => _error = 'Wait for the image to finish uploading.');
+      return;
+    }
+    if (name.isEmpty) {
+      setState(() => _error = 'Name is required.');
+      return;
+    }
+    if (key.isEmpty) {
+      setState(() => _error =
+          'Key is required. Use lowercase letters, numbers and underscores.');
+      return;
+    }
+    if (widget.existing == null && !CategoryService.keyPattern.hasMatch(key)) {
+      setState(() => _error =
+          'Key can only contain lowercase letters (a-z), numbers and underscores.');
+      return;
+    }
+    if (order == null || order < 0) {
+      setState(() => _error = 'Display order must be a whole number of 0 or more.');
       return;
     }
 
@@ -94,7 +115,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
         final nextOrder = all.isEmpty
             ? 0
             : all.map((c) => c.order).reduce((a, b) => a > b ? a : b) + 1;
-        await CategoryService.instance.addCategory(AppCategory(
+        final created = await CategoryService.instance.addCategory(AppCategory(
           id: key,
           key: key,
           name: name,
@@ -105,6 +126,15 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
           isFeaturedInCarousel: _isFeaturedInCarousel,
           showInOnboarding: _showInOnboarding,
         ));
+        if (!created) {
+          if (mounted) {
+            setState(() {
+              _saving = false;
+              _error = 'A category with this key already exists.';
+            });
+          }
+          return;
+        }
       } else {
         await CategoryService.instance.updateCategory(
           e.copyWith(
@@ -143,7 +173,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: _saving ? null : _save,
+            onPressed: _saving || _imageBusy ? null : _save,
             child: _saving
                 ? const SizedBox(
                     width: 18,
@@ -188,7 +218,16 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
               accentColor: AppTheme.orange,
               height: 160,
               onUploaded: (url) => setState(() => _imageUrl = url),
+              onBusyChanged: (busy) {
+                if (mounted) setState(() => _imageBusy = busy);
+              },
             ),
+            if (_imageBusy)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Wait for the image to finish uploading',
+                    style: AppTheme.inter(size: 10, color: Colors.grey)),
+              ),
             const SizedBox(height: 16),
 
             _field('Name', _nameCtr, hint: 'Anime & Manga'),

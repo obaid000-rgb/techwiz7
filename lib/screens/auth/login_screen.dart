@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_logo.dart';
 import '../../utils/validators.dart';
 import 'forgot_password_screen.dart';
 import 'signup_screen.dart';
@@ -41,6 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (mounted) Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
       setState(() { _errorMessage = _friendlyError(e.code); });
     } finally {
       if (mounted) setState(() { _loading = false; });
@@ -55,10 +57,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (signedIn && mounted) Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
       debugPrint("Firebase Auth Google Exception: Code: ${e.code}, Message: ${e.message}");
+      if (!mounted) return;
       setState(() { _errorMessage = _friendlyError(e.code); });
     } catch (e, stack) {
       debugPrint("Detailed Google Sign-In Failure Object: $e");
       debugPrint("Stacktrace: $stack");
+      if (!mounted) return;
       setState(() { _errorMessage = _googleError(e); });
     } finally {
       if (mounted) setState(() { _loading = false; });
@@ -69,6 +73,9 @@ class _LoginScreenState extends State<LoginScreen> {
     switch (code) {
       case 'user-not-found':
         return 'No account found with this email.';
+      case 'invalid-credential':
+      case 'invalid-login-credentials':
+        return 'Incorrect email or password.';
       case 'wrong-password':
         return 'Incorrect password. Please try again.';
       case 'invalid-email':
@@ -130,32 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Center(
-                        child: Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            gradient: const LinearGradient(
-                              colors: [AppTheme.accent, AppTheme.cyan],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.cyan.withValues(alpha: 0.4),
-                                blurRadius: 12,
-                                spreadRadius: 2,
-                              ),
-                            ],
-                          ),
-                          child: const Center(
-                            child: Text('F',
-                                style: TextStyle(
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white)),
-                          ),
-                        ),
-                      ),
+                      const Center(child: AppLogo(size: 60)),
                       const SizedBox(height: 20),
                       const Text('FANDOM VERSE',
                           textAlign: TextAlign.center,

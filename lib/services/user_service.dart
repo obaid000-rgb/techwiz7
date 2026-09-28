@@ -98,6 +98,10 @@ class UserService {
         'badge': badge,
       });
 
+  /// Admin: deactivate (signs the fan out and blocks sign-in) or reactivate.
+  Future<void> setDisabled(String uid, bool disabled) =>
+      FirestoreDb.instance.collection('users').doc(uid).update({'disabled': disabled});
+
   Future<void> deleteUser(String uid) =>
       FirestoreDb.instance.collection('users').doc(uid).delete();
 }

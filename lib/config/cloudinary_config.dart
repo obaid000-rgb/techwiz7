@@ -5,4 +5,6 @@ class CloudinaryConfig {
   static const String uploadPreset = 'fundom';
   static const String uploadUrl =
       'https://api.cloudinary.com/v1_1/$cloudName/image/upload';
+  static const String videoUploadUrl =
+      'https://api.cloudinary.com/v1_1/$cloudName/video/upload';
 }

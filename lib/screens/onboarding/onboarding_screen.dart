@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/category_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_logo.dart';
 import '../../utils/category_icons.dart';
 
 /// Categories offered on the interest step: active categories flagged
@@ -40,6 +41,10 @@ class OnboardingScreen extends StatefulWidget {
       {super.key, required this.onPreLoginComplete, this.categoriesStream})
       : user = null;
 
+  /// Set when a signed-in fan taps "Skip for now" because interests couldn't
+  /// load; FanHomeScreen stops showing onboarding for the rest of the session.
+  static final ValueNotifier<bool> skippedThisSession = ValueNotifier(false);
+
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
@@ -62,7 +67,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   bool _saving = false;
   String? _error;
 
-  late final Stream<List<AppCategory>> _categories =
+  late Stream<List<AppCategory>> _categories = _watchCategories();
+
+  Stream<List<AppCategory>> _watchCategories() =>
       widget.categoriesStream ?? CategoryService.instance.watchActiveCategories();
   late final AnimationController _bgCtrl =
       AnimationController(vsync: this, duration: const Duration(seconds: 24));
@@ -129,6 +136,35 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       }
     }
   }
+
+  /// "Skip for now" when interests can't load: finishes onboarding with no
+  /// picks. Pre-login this goes through the normal completion callback (an
+  /// empty selection is simply not applied at sign-up). A signed-in account
+  /// only counts as onboarded once it has interests, so for it the skip
+  /// lasts for this app session and the picker comes back next launch.
+  Future<void> _skip() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      if (widget.user == null) {
+        await widget.onPreLoginComplete!(const [], _selectedBadge ?? '');
+        return;
+      }
+      OnboardingScreen.skippedThisSession.value = true;
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = 'Could not continue. Please try again.';
+        });
+      }
+    }
+  }
+
+  void _retryCategories() => setState(() => _categories = _watchCategories());
 
   // ── Layout ────────────────────────────────────────────────────────────────
 
@@ -267,25 +303,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     final mark = compact ? 40.0 : 52.0;
     return Row(
       children: [
-        Container(
-          width: mark,
-          height: mark,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(mark * 0.28),
-            gradient: const LinearGradient(
-              colors: [AppTheme.accent, AppTheme.cyan],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            boxShadow: [
-              BoxShadow(color: AppTheme.accent.withValues(alpha: 0.55), blurRadius: 18),
-            ],
-          ),
-          alignment: Alignment.center,
-          child: Text('FV',
-              style: GoogleFonts.orbitron(
-                  color: Colors.white, fontWeight: FontWeight.w900, fontSize: mark * 0.36)),
-        ),
+        AppLogo(size: mark),
         const SizedBox(width: 14),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,7 +389,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       stream: _categories,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return _notice(Icons.wifi_off, 'Could not load interests. Check your connection.');
+          return _loadProblem(Icons.wifi_off, 'Could not load interests. Check your connection.');
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -382,7 +400,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           );
         }
         final cats = onboardingCategories(snapshot.data ?? const []);
-        if (cats.isEmpty) return _notice(Icons.category_outlined, 'No categories available yet.');
+        if (cats.isEmpty) {
+          return _loadProblem(Icons.category_outlined, 'No categories available yet.');
+        }
 
         final cols = width >= 600 ? 5 : (width >= 400 ? 4 : 3);
         const gap = 12.0;
@@ -448,6 +468,34 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             Expanded(child: Text(text, style: AppTheme.inter(size: 12, color: Colors.white60))),
           ],
         ),
+      );
+
+  Widget _loadProblem(IconData icon, String text) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _notice(icon, text),
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _saving ? null : _retryCategories,
+                icon: const Icon(Icons.refresh, size: 16, color: AppTheme.cyan),
+                label: Text('Try again',
+                    style: AppTheme.inter(size: 13, color: AppTheme.cyan, weight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: AppTheme.cyan.withValues(alpha: 0.6)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              TextButton(
+                onPressed: _saving ? null : _skip,
+                child: Text('Skip for now',
+                    style: AppTheme.inter(size: 13, color: Colors.white70, weight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        ],
       );
 
   Widget _startButton() => _GlowButton(

@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/app_logo.dart';
 import 'admin_dashboard.dart';
 import '../avatars/avatar_library_screen.dart';
+import '../backup/backup_screen.dart';
+import '../faqs/faq_management_screen.dart';
+import '../inquiries/inquiry_management_screen.dart';
+import '../team/team_management_screen.dart';
 import '../categories/category_management_screen.dart';
 import '../content/content_moderation_screen.dart';
 import '../creators/creator_management_screen.dart';
 import '../fandoms/fandom_management_screen.dart';
-import '../tags/tag_management_screen.dart';
 import '../glossary/glossary_management_screen.dart';
 import '../onboarding_slides/onboarding_slide_management_screen.dart';
 import '../orders/order_management_screen.dart';
@@ -130,12 +134,6 @@ class _AdminShellState extends State<AdminShell> {
       child: const CreatorManagementScreen(),
     ),
     _NavItem(
-      icon: Icons.sell_outlined,
-      label: 'Tags',
-      color: AppTheme.cyan,
-      child: const TagManagementScreen(),
-    ),
-    _NavItem(
       icon: Icons.menu_book_outlined,
       label: 'Glossary',
       color: AppTheme.cyan,
@@ -153,31 +151,36 @@ class _AdminShellState extends State<AdminShell> {
       color: AppTheme.cyan,
       child: const AvatarLibraryScreen(),
     ),
+    _NavItem(
+      icon: Icons.mail_outline,
+      label: 'Inquiries',
+      color: AppTheme.pink,
+      child: const InquiryManagementScreen(),
+    ),
+    _NavItem(
+      icon: Icons.groups_2_outlined,
+      label: 'About Us Team',
+      color: AppTheme.accent,
+      child: const TeamManagementScreen(),
+    ),
+    _NavItem(
+      icon: Icons.quiz_outlined,
+      label: 'FAQs',
+      color: AppTheme.cyan,
+      child: const FaqManagementScreen(),
+    ),
+    _NavItem(
+      icon: Icons.backup_outlined,
+      label: 'Backup',
+      color: AppTheme.orange,
+      child: const BackupScreen(),
+    ),
   ];
 
   static final List<Widget> _children =
       _navItems.map((e) => e.child).toList();
 
-  static Widget _brandMark({double size = 32, double iconSize = 16}) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(size * 0.28),
-          gradient: const LinearGradient(
-            colors: [AppTheme.orange, AppTheme.accent],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppTheme.orange.withValues(alpha: 0.35),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Icon(Icons.admin_panel_settings, color: Colors.white, size: iconSize),
-      );
+  static Widget _brandMark({double size = 32}) => AppLogo(size: size);
 
   AppBar _appBar(BuildContext context, {bool showMenuAction = false}) {
     return AppBar(
