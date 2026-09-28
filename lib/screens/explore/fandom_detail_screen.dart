@@ -1,12 +1,18 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import '../../controllers/beginner_hub/beginner_hub_controller.dart';
 import '../../models/post.dart';
 import '../../services/auth_service.dart';
 import '../../services/offline_service.dart';
 import '../../services/post_service.dart';
+import '../../services/xp_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/levels.dart';
 import '../../utils/youtube_utils.dart';
+import '../shop/shop_tab.dart' show showGuestLoginSheet;
+import '../fandoms/fandom_page_screen.dart';
+import 'video_player_screen.dart';
 
 class FandomDetailScreen extends StatefulWidget {
   final Post post;
@@ -23,9 +29,19 @@ class _FandomDetailScreenState extends State<FandomDetailScreen> {
   bool? _isSavedOffline;
   bool _savingOffline = false;
 
+  late final bool _locked;
+
   @override
   void initState() {
     super.initState();
+    final viewer = AuthService.instance.currentUser;
+    _locked = widget.post.contentDepth == 'deep' &&
+        !canOpenDeepDive(
+            signedIn: viewer != null, isAdmin: viewer?.isAdmin ?? false, xp: viewer?.xp ?? 0);
+    // Locked Deep Dive: nothing below loads — no body, media, video, view
+    // count or XP. Only the title and cover are shown.
+    if (_locked) return;
+    XpService.instance.award(XpAction.firstPostOpen, targetId: widget.post.id);
     // Trending Today: count this view (signed-in fans only — the security
     // rules only let signed-in users touch the view fields). Fire-and-forget;
     // a failed count must never affect reading the post.
@@ -34,6 +50,7 @@ class _FandomDetailScreenState extends State<FandomDetailScreen> {
         if (kDebugMode) debugPrint('[Trending] recordView failed: $e');
       });
     }
+    if (widget.post.contentDepth == 'beginner') BeginnerHubController.markBeginnerGuideRead();
     OfflineService.instance.isSaved(widget.post.id).then((saved) {
       if (mounted) setState(() => _isSavedOffline = saved);
     });
@@ -61,9 +78,89 @@ class _FandomDetailScreenState extends State<FandomDetailScreen> {
     super.dispose();
   }
 
+  Widget _lockedView(Post post) {
+    final viewer = AuthService.instance.currentUser;
+    final videoId = post.hasVideo ? extractYoutubeVideoId(post.youtubeUrl!) : null;
+    final cover = post.imageUrl.isNotEmpty
+        ? post.imageUrl
+        : (videoId != null ? youtubeThumbnailUrl(videoId) : '');
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 220,
+            pinned: true,
+            backgroundColor: AppTheme.card,
+            flexibleSpace: FlexibleSpaceBar(
+              background: cover.isEmpty
+                  ? Container(color: AppTheme.card)
+                  : Image.network(cover,
+                      fit: BoxFit.cover,
+                      errorBuilder: (ctx, e, st) => Container(color: AppTheme.card)),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(post.title,
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 20),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppTheme.card,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppTheme.orange.withValues(alpha: 0.6)),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.lock_rounded, color: AppTheme.orange, size: 36),
+                        const SizedBox(height: 10),
+                        Text(
+                          viewer == null
+                              ? 'Sign in and reach Level $kDeepDiveLevel to unlock Deep Dive'
+                              : 'Deep Dive unlocks at Level $kDeepDiveLevel. '
+                                  'You need ${xpToLevel(viewer.xp, kDeepDiveLevel)} more XP.',
+                          textAlign: TextAlign.center,
+                          style: AppTheme.inter(
+                              size: 14, color: Colors.white, weight: FontWeight.w600),
+                        ),
+                        if (viewer == null) ...[
+                          const SizedBox(height: 14),
+                          ElevatedButton(
+                            onPressed: () =>
+                                showGuestLoginSheet(context, feature: 'Deep Dive'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.cyan,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text('LOG IN',
+                                style: AppTheme.orbitron(
+                                    size: 11, color: Colors.black, weight: FontWeight.w800)),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final post = widget.post;
+    if (_locked) return _lockedView(post);
     return Scaffold(
       body: CustomScrollView(
         slivers: [
@@ -89,6 +186,10 @@ class _FandomDetailScreenState extends State<FandomDetailScreen> {
                           color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
                     ),
                   ),
+                  if (post.hasFandom) ...[
+                    const SizedBox(height: 8),
+                    _fandomChip(post),
+                  ],
                   const SizedBox(height: 12),
                   Text(
                     post.title,
@@ -124,6 +225,40 @@ class _FandomDetailScreenState extends State<FandomDetailScreen> {
       _savingOffline = false;
     });
   }
+
+  Widget _fandomChip(Post post) => Material(
+        color: AppTheme.accent.withValues(alpha: 0.15),
+        shape: StadiumBorder(
+            side: BorderSide(color: AppTheme.accent.withValues(alpha: 0.5))),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => FandomPageScreen(fandomId: post.fandomId)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.hub_outlined, color: Colors.white70, size: 13),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    post.fandomName.isEmpty ? 'View fandom' : post.fandomName,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.inter(
+                        size: 11, color: Colors.white, weight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(width: 3),
+                const Icon(Icons.chevron_right, color: Colors.white70, size: 14),
+              ],
+            ),
+          ),
+        ),
+      );
 
   Widget _offlineButton() {
     final saved = _isSavedOffline ?? false;
@@ -179,17 +314,32 @@ class _FandomDetailScreenState extends State<FandomDetailScreen> {
         ),
       );
     }
-    return YoutubePlayerThumbnail(
-      controller: _controller!,
-      backgroundColor: AppTheme.card,
-      playIcon: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.6),
-          shape: BoxShape.circle,
+    return Stack(fit: StackFit.expand, children: [
+      YoutubePlayerThumbnail(
+        controller: _controller!,
+        backgroundColor: AppTheme.card,
+        playIcon: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.6),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.play_arrow, color: Colors.white, size: 36),
         ),
-        child: const Icon(Icons.play_arrow, color: Colors.white, size: 36),
       ),
-    );
+      Positioned(
+        right: 12,
+        bottom: 12,
+        child: FullScreenVideoButton(
+          size: 42,
+          onPressed: () => openFullScreenVideo(
+            context,
+            videoId: extractYoutubeVideoId(post.youtubeUrl!)!,
+            title: post.title,
+            inline: _controller,
+          ),
+        ),
+      ),
+    ]);
   }
 }

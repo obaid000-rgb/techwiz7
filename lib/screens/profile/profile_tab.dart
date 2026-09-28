@@ -7,9 +7,18 @@ import '../../services/category_service.dart';
 import '../../services/offline_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/levels.dart';
+import '../../widgets/avatar_view.dart';
 import '../../widgets/guest_prompt.dart';
+import '../../models/fandom.dart';
+import '../../services/fandom_service.dart';
+import '../events/my_agenda_screen.dart';
+import '../shop/wishlist_screen.dart';
+import 'following_screen.dart';
 import 'widgets/my_fandoms_card.dart';
 import 'edit_profile_screen.dart';
+import '../info/about_us_screen.dart';
+import '../info/contact_us_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'offline_downloads_screen.dart';
 import 'purchase_history_screen.dart';
@@ -24,7 +33,34 @@ class ProfileTab extends StatelessWidget {
       valueListenable: AuthService.instance.userNotifier,
       builder: (context, user, _) {
         if (user == null) {
-          return const GuestPrompt(feature: 'Your profile and saved content');
+          // Guests can't open the profile, but About/Contact stay reachable.
+          return Column(children: [
+            const Expanded(child: GuestPrompt(feature: 'Your profile and saved content')),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Wrap(alignment: WrapAlignment.center, spacing: 8, children: [
+                  TextButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AboutUsScreen()),
+                    ),
+                    icon: const Icon(Icons.info_outline_rounded, size: 18, color: AppTheme.cyan),
+                    label: Text('About Us', style: AppTheme.inter(size: 13, color: AppTheme.cyan)),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ContactUsScreen()),
+                    ),
+                    icon: const Icon(Icons.mail_outline_rounded, size: 18, color: AppTheme.cyan),
+                    label: Text('Contact Us', style: AppTheme.inter(size: 13, color: AppTheme.cyan)),
+                  ),
+                ]),
+              ),
+            ),
+          ]);
         }
         return _ProfileContent(user: user);
       },
@@ -175,15 +211,7 @@ class _ProfileContentState extends State<_ProfileContent> {
               shape: BoxShape.circle,
               gradient: LinearGradient(colors: [AppTheme.cyan, AppTheme.accent]),
             ),
-            child: CircleAvatar(
-              radius: 46,
-              backgroundColor: AppTheme.card,
-              backgroundImage: user.avatarUrl.isNotEmpty ? NetworkImage(user.avatarUrl) : null,
-              child: user.avatarUrl.isEmpty
-                  ? Text(user.name.isEmpty ? '?' : user.name[0].toUpperCase(),
-                      style: AppTheme.orbitron(size: 30, weight: FontWeight.w900))
-                  : null,
-            ),
+            child: AvatarView.user(user, radius: 46),
           ),
           const SizedBox(height: 14),
           Text(user.name,
@@ -210,6 +238,51 @@ class _ProfileContentState extends State<_ProfileContent> {
               ),
             ),
           ],
+          const SizedBox(height: 16),
+
+          _levelCard(user.xp),
+          const SizedBox(height: 12),
+
+          // Stats row — every number is real data and opens its list.
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.card,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _FollowingStat(
+                    key: ValueKey(user.followedFandomIds.join(',')),
+                    fandomIds: user.followedFandomIds,
+                    builder: (count) => _stat('$count', 'Following',
+                        () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => const FollowingScreen()))),
+                  ),
+                ),
+                Container(width: 1, height: 32, color: AppTheme.border),
+                Expanded(
+                  child: _stat('${user.bookmarkedPostIds.length}', 'Saved',
+                      () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const SavedBookmarksScreen()))),
+                ),
+                Container(width: 1, height: 32, color: AppTheme.border),
+                Expanded(
+                  child: _stat('${user.wishlistedProductIds.length}', 'Wishlist',
+                      () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const WishlistScreen()))),
+                ),
+                Container(width: 1, height: 32, color: AppTheme.border),
+                Expanded(
+                  child: _stat('${user.savedEventIds.length}', 'Agenda',
+                      () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const MyAgendaScreen()))),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 18),
 
           SizedBox(
@@ -252,26 +325,6 @@ class _ProfileContentState extends State<_ProfileContent> {
           ),
           const SizedBox(height: 12),
           _fandomsCard(user),
-          const SizedBox(height: 20),
-
-          // Stats row
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: AppTheme.card,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.border),
-            ),
-            child: Row(
-              children: [
-                Expanded(child: _stat('${user.bookmarkedPostIds.length}', 'Bookmarks')),
-                Container(width: 1, height: 32, color: AppTheme.border),
-                Expanded(child: _stat('${user.savedEvents}', 'Events')),
-                Container(width: 1, height: 32, color: AppTheme.border),
-                Expanded(child: _stat(user.rank, 'Fan rank')),
-              ],
-            ),
-          ),
           const SizedBox(height: 24),
 
           _groupLabel('YOUR LIBRARY'),
@@ -326,6 +379,24 @@ class _ProfileContentState extends State<_ProfileContent> {
                     MaterialPageRoute(builder: (_) => const NotificationsScreen()),
                   ),
                 ),
+                const Divider(height: 1, color: AppTheme.border),
+                _menuTile(
+                  Icons.info_outline_rounded,
+                  'About Us',
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AboutUsScreen()),
+                  ),
+                ),
+                const Divider(height: 1, color: AppTheme.border),
+                _menuTile(
+                  Icons.mail_outline_rounded,
+                  'Contact Us',
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ContactUsScreen()),
+                  ),
+                ),
               ],
             ),
           ),
@@ -352,13 +423,71 @@ class _ProfileContentState extends State<_ProfileContent> {
     );
   }
 
-  Widget _stat(String val, String label) {
-    return Column(
-      children: [
-        Text(val, style: AppTheme.orbitron(size: 17, color: AppTheme.cyan, weight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        Text(label, style: AppTheme.inter(size: 12, color: AppTheme.textMuted)),
-      ],
+  Widget _levelCard(int xp) {
+    final level = levelFor(xp);
+    final max = level >= kMaxLevel;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.emoji_events_rounded, color: AppTheme.orange, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Level $level · ${levelName(level)}',
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.orbitron(size: 13, weight: FontWeight.w700)),
+              ),
+              Text('$xp XP',
+                  style: AppTheme.inter(size: 12, color: AppTheme.cyan, weight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: progressToNextLevel(xp),
+              minHeight: 8,
+              backgroundColor: AppTheme.bg,
+              color: max ? AppTheme.orange : AppTheme.accent,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            max ? 'Max level' : '${xpToNextLevel(xp)} XP to Level ${level + 1}',
+            style: AppTheme.inter(size: 11, color: AppTheme.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stat(String val, String label, VoidCallback onTap) {
+    return Semantics(
+      button: true,
+      label: '$val $label',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            children: [
+              Text(val, style: AppTheme.orbitron(size: 17, color: AppTheme.cyan, weight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text(label, style: AppTheme.inter(size: 12, color: AppTheme.textMuted)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -425,7 +554,11 @@ class _ProfileContentState extends State<_ProfileContent> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(children: [
-                          Text(title, style: AppTheme.inter(size: 15, weight: FontWeight.w600)),
+                          Flexible(
+                            child: Text(title,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTheme.inter(size: 15, weight: FontWeight.w600)),
+                          ),
                           const SizedBox(width: 8),
                           Text('$count',
                               style: AppTheme.inter(size: 12, weight: FontWeight.w600, color: AppTheme.textMuted)),
@@ -437,7 +570,11 @@ class _ProfileContentState extends State<_ProfileContent> {
                         Row(children: [
                           Icon(badgeIcon, color: color, size: 14),
                           const SizedBox(width: 4),
-                          Text(badge, style: AppTheme.inter(size: 11, weight: FontWeight.w600, color: color)),
+                          Flexible(
+                            child: Text(badge,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTheme.inter(size: 11, weight: FontWeight.w600, color: color)),
+                          ),
                         ]),
                       ],
                     ),
@@ -451,12 +588,34 @@ class _ProfileContentState extends State<_ProfileContent> {
       );
 
   Widget _menuTile(IconData icon, String title, VoidCallback onTap) {
-    return ListTile(
-      minTileHeight: 56,
-      leading: Icon(icon, color: AppTheme.cyan, size: 22),
-      title: Text(title, style: AppTheme.inter(size: 14, weight: FontWeight.w500)),
-      trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
-      onTap: onTap,
+    // Own transparent Material so the tap ripple shows on the card behind it.
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        minTileHeight: 56,
+        leading: Icon(icon, color: AppTheme.cyan, size: 22),
+        title: Text(title, style: AppTheme.inter(size: 14, weight: FontWeight.w500)),
+        trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+/// Live count of the fan's followed fandoms that are still active.
+class _FollowingStat extends StatelessWidget {
+  final List<String> fandomIds;
+  final Widget Function(int count) builder;
+  const _FollowingStat({super.key, required this.fandomIds, required this.builder});
+
+  @override
+  Widget build(BuildContext context) {
+    if (fandomIds.isEmpty) return builder(0);
+    return StreamBuilder<List<Fandom>>(
+      stream: FandomService.instance.watchByIds(fandomIds),
+      builder: (context, snap) => builder(snap.hasData
+          ? snap.data!.where((f) => f.isActive).length
+          : fandomIds.length),
     );
   }
 }

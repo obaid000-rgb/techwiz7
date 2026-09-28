@@ -7,6 +7,7 @@ class AppCategory {
   final int order;
   final String description; // optional short tagline/summary
   final bool isFeaturedInCarousel;
+  final bool showInOnboarding;
 
   const AppCategory({
     required this.id,
@@ -17,6 +18,7 @@ class AppCategory {
     this.order = 0,
     this.description = '',
     this.isFeaturedInCarousel = false,
+    this.showInOnboarding = false,
   });
 
   bool get isActive => status == 'active';
@@ -31,6 +33,9 @@ class AppCategory {
         order: (map['order'] as num?)?.toInt() ?? 0,
         description: map['description'] ?? '',
         isFeaturedInCarousel: map['isFeaturedInCarousel'] as bool? ?? false,
+        showInOnboarding: map['showInOnboarding'] is bool
+            ? map['showInOnboarding'] as bool
+            : false,
       );
 
   Map<String, dynamic> toMap() => {
@@ -41,6 +46,7 @@ class AppCategory {
         if (imageUrl != null) 'imageUrl': imageUrl,
         'description': description,
         'isFeaturedInCarousel': isFeaturedInCarousel,
+        'showInOnboarding': showInOnboarding,
       };
 
   AppCategory copyWith({
@@ -51,6 +57,7 @@ class AppCategory {
     int? order,
     String? description,
     bool? isFeaturedInCarousel,
+    bool? showInOnboarding,
   }) =>
       AppCategory(
         id: id,
@@ -61,5 +68,6 @@ class AppCategory {
         order: order ?? this.order,
         description: description ?? this.description,
         isFeaturedInCarousel: isFeaturedInCarousel ?? this.isFeaturedInCarousel,
+        showInOnboarding: showInOnboarding ?? this.showInOnboarding,
       );
 }

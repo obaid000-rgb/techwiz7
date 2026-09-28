@@ -2,9 +2,14 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../admin/views/dashboard/admin_shell.dart';
+import '../../logic/resource_query.dart';
+import '../resources/resources_screen.dart';
 import '../../services/chatbot/ai_assistant_service.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/avatar_view.dart';
+import '../../services/xp_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/levels.dart';
 import '../auth/login_screen.dart';
 import '../auth/signup_screen.dart';
 import '../events/explore_tab.dart';
@@ -17,8 +22,33 @@ import '../shop/shop_tab.dart';
 class FanHomeScreen extends StatefulWidget {
   const FanHomeScreen({super.key});
 
+  static const int loreTab = 1;
+  static const int eventsTab = 2;
+  static const int shopTab = 3;
+
+  static final ValueNotifier<({int index, WidgetBuilder? backTo})?>
+      _tabRequest = ValueNotifier(null);
+
+  static void openTab(BuildContext context, int index,
+      {WidgetBuilder? backTo}) {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    _tabRequest.value = (index: index, backTo: backTo);
+  }
+
   @override
   State<FanHomeScreen> createState() => _FanHomeScreenState();
+}
+
+void showFanAssistant(BuildContext context) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppTheme.card,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (context) => const _AiAssistantSheet(),
+  );
 }
 
 class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProviderStateMixin {
@@ -34,29 +64,51 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
       vsync: this,
       duration: const Duration(seconds: 8),
     )..repeat(reverse: true);
+    FanHomeScreen._tabRequest.addListener(_onTabRequest);
+    XpService.instance.levelUps.addListener(_onLevelUp);
   }
 
   @override
   void dispose() {
+    FanHomeScreen._tabRequest.removeListener(_onTabRequest);
+    XpService.instance.levelUps.removeListener(_onLevelUp);
     _glowController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _openAIAssistant() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  void _openAIAssistant() => showFanAssistant(context);
+
+  void _openResourcesSearch(String query) {
+    final q = query.trim();
+    if (q.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ResourcesScreen(initialFilter: ResourceFilter(query: q)),
       ),
-      builder: (context) => const _AiAssistantSheet(),
     );
+    _searchController.clear();
+    setState(() => _searchQuery = '');
+  }
+
+  WidgetBuilder? _backTo;
+
+  void _onTabRequest() {
+    final request = FanHomeScreen._tabRequest.value;
+    if (request == null || !mounted) return;
+    FanHomeScreen._tabRequest.value = null;
+    setState(() {
+      _currentIndex = request.index;
+      _backTo = request.backTo;
+    });
   }
 
   PreferredSizeWidget _buildAppBar() {
     final double appBarHeight = _currentIndex == 0 ? 130 : 75;
+    // Narrow phones (≈360dp): tighten the logo, gaps and buttons so the
+    // guest LOG IN + JOIN buttons fit instead of overflowing off-screen.
+    final bool compact = MediaQuery.sizeOf(context).width < 420;
     return PreferredSize(
       preferredSize: Size.fromHeight(appBarHeight),
       child: Stack(
@@ -142,8 +194,8 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
                           children: [
                             // Premium Sharp Logo
                             Container(
-                              width: 36,
-                              height: 36,
+                              width: compact ? 32 : 36,
+                              height: compact ? 32 : 36,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(10),
                                 gradient: const LinearGradient(
@@ -179,9 +231,16 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 14),
-                            // Branding
-                            Column(
+                            SizedBox(width: compact ? 10 : 14),
+                            // Branding: takes the free space and scales down
+                            // (never overflows) when the buttons need room.
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -219,8 +278,11 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
                                   ),
                                 ),
                               ],
+                                  ),
+                                ),
+                              ),
                             ),
-                            const Spacer(),
+                            const SizedBox(width: 8),
                             // Auth/User Controls
                             ValueListenableBuilder<UserData?>(
                               valueListenable: AuthService.instance.userNotifier,
@@ -235,8 +297,9 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
                                           MaterialPageRoute(builder: (_) => const LoginScreen()),
                                         ),
                                         isPrimary: false,
+                                        compact: compact,
                                       ),
-                                      const SizedBox(width: 10),
+                                      SizedBox(width: compact ? 6 : 10),
                                       _buildPremiumButton(
                                         label: 'JOIN',
                                         onTap: () => Navigator.push(
@@ -244,6 +307,7 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
                                           MaterialPageRoute(builder: (_) => const SignupScreen()),
                                         ),
                                         isPrimary: true,
+                                        compact: compact,
                                       ),
                                     ],
                                   );
@@ -251,7 +315,9 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
                                 final isAdmin = user.role == 'admin';
                                 return Row(
                                   children: [
-                                    _buildUserBadge(isAdmin ? 'ADMIN' : 'FAN', isAdmin),
+                                    _buildUserBadge(isAdmin ? 'ADMIN' : 'FAN', isAdmin, user),
+                                    const SizedBox(width: 6),
+                                    _buildLevelChip(user.xp),
                                     if (isAdmin) ...[
                                       const SizedBox(width: 10),
                                       _buildGlossyIconButton(
@@ -287,7 +353,12 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildPremiumButton({required String label, required VoidCallback onTap, required bool isPrimary}) {
+  Widget _buildPremiumButton({
+    required String label,
+    required VoidCallback onTap,
+    required bool isPrimary,
+    bool compact = false,
+  }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -295,7 +366,7 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
         borderRadius: BorderRadius.circular(12),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 11 : 16, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             gradient: isPrimary
@@ -334,7 +405,53 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildUserBadge(String label, bool isAdmin) {
+  Widget _buildLevelChip(int xp) => Tooltip(
+        message: 'Level ${levelFor(xp)}: ${levelName(levelFor(xp))}',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppTheme.accent.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppTheme.accent.withValues(alpha: 0.5)),
+          ),
+          child: Text(
+            'Lv ${levelFor(xp)}',
+            style: GoogleFonts.orbitron(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      );
+
+  void _onLevelUp() {
+    final level = XpService.instance.levelUps.value;
+    if (level == null || !mounted) return;
+    XpService.instance.levelUps.value = null;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        icon: const Icon(Icons.emoji_events_rounded, color: AppTheme.orange, size: 40),
+        title: Text('Level up!',
+            textAlign: TextAlign.center,
+            style: AppTheme.orbitron(size: 16, weight: FontWeight.w800)),
+        content: Text('You\'re now Level $level: ${levelName(level)}.',
+            textAlign: TextAlign.center,
+            style: AppTheme.inter(size: 14, color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Nice!', style: AppTheme.inter(size: 13, color: AppTheme.cyan)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserBadge(String label, bool isAdmin, UserData user) {
     final color = isAdmin ? AppTheme.orange : AppTheme.cyan;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -353,7 +470,7 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(isAdmin ? Icons.shield_rounded : Icons.person_rounded, color: color, size: 14),
+          AvatarView.user(user, radius: 9),
           const SizedBox(width: 6),
           Text(
             label,
@@ -423,9 +540,11 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
       child: TextField(
         controller: _searchController,
         onChanged: (val) => setState(() => _searchQuery = val),
+        textInputAction: TextInputAction.search,
+        onSubmitted: _openResourcesSearch,
         style: AppTheme.inter(color: Colors.white, size: 14),
         decoration: InputDecoration(
-          hintText: 'Search the Fandom Verse...',
+          hintText: 'Search news, videos, podcasts, fandoms',
           hintStyle: AppTheme.inter(color: AppTheme.textMuted.withValues(alpha: 0.6), size: 14),
           prefixIcon: Icon(Icons.search_rounded, color: AppTheme.cyan.withValues(alpha: 0.7), size: 20),
           suffixIcon: _searchQuery.isNotEmpty
@@ -455,7 +574,16 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
         if (user != null && !user.hasOnboarded) {
           return OnboardingScreen(user: user);
         }
-        return _buildTabs(context);
+        return PopScope(
+          canPop: _backTo == null,
+          onPopInvokedWithResult: (didPop, _) {
+            final backTo = _backTo;
+            if (didPop || backTo == null) return;
+            setState(() => _backTo = null);
+            Navigator.push(context, MaterialPageRoute(builder: backTo));
+          },
+          child: _buildTabs(context),
+        );
       },
     );
   }
@@ -470,7 +598,10 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
     ];
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
+      // Content starts BELOW the header. With extendBodyBehindAppBar: true
+      // the tabs started at the top of the screen, under the 130px header,
+      // and the Home slider / other tabs' titles were hidden behind it.
+      backgroundColor: AppTheme.bg,
       appBar: _buildAppBar(),
       body: IndexedStack(index: _currentIndex, children: tabs),
       floatingActionButton: _currentIndex == 0
@@ -515,7 +646,10 @@ class _FanHomeScreenState extends State<FanHomeScreen> with SingleTickerProvider
         ),
         child: NavigationBar(
           selectedIndex: _currentIndex,
-          onDestinationSelected: (index) => setState(() => _currentIndex = index),
+          onDestinationSelected: (index) => setState(() {
+            _currentIndex = index;
+            _backTo = null;
+          }),
           backgroundColor: AppTheme.bg,
           surfaceTintColor: Colors.transparent,
           indicatorColor: AppTheme.accent.withValues(alpha: 0.28),
@@ -573,6 +707,7 @@ class _AiAssistantSheetState extends State<_AiAssistantSheet> {
     _scrollToEnd();
     try {
       await _service.ask(text);
+      XpService.instance.award(XpAction.aiQuestion);
     } on AiAssistantException catch (e) {
       _error = e.message;
       _failedText = text;

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../models/merchandise.dart';
 import '../../../services/merchandise_service.dart';
 import '../../../theme/app_theme.dart';
-import '../../widgets/category_picker_field.dart';
+import '../../../models/fandom.dart';
+import '../../widgets/fandom_picker_fields.dart';
 import '../../../widgets/image_upload_field.dart';
 
 class MerchandiseFormScreen extends StatefulWidget {
@@ -18,6 +19,8 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
   final _priceCtr = TextEditingController();
   final _descCtr = TextEditingController();
   String? _category;
+  Fandom? _fandom;
+  bool _fandomTouched = false;
   String _imageUrl = '';
   bool _saving = false;
   String? _error;
@@ -93,11 +96,22 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
                 keyboardType: const TextInputType.numberWithOptions(
                     decimal: true)),
             const SizedBox(height: 16),
-            _label('Category'),
-            CategoryPickerField(
-              value: _category,
+            CategoryFandomPicker(
+              initialCategory: _category,
+              initialFandomId: (widget.existing?.hasFandom ?? false)
+                  ? widget.existing!.fandomId
+                  : null,
+              fandomOptional: true,
+              noneLabel: 'None (general product)',
               accentColor: AppTheme.orange,
-              onChanged: (v) => setState(() => _category = v),
+              onCategoryChanged: (v) => setState(() {
+                _category = v;
+                _fandomTouched = true;
+              }),
+              onFandomChanged: (f) => setState(() {
+                _fandom = f;
+                if (f == null) _fandomTouched = true;
+              }),
             ),
             const SizedBox(height: 16),
             _label('Image (optional)'),
@@ -182,6 +196,12 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
       setState(() => _error = 'Enter a valid price.');
       return;
     }
+    final fandom = _fandom;
+    final category = fandom?.categoryId ?? _category;
+    if (category == null || category.isEmpty) {
+      setState(() => _error = 'Choose a category.');
+      return;
+    }
 
     setState(() {
       _saving = true;
@@ -192,9 +212,12 @@ class _MerchandiseFormScreenState extends State<MerchandiseFormScreen> {
         id: widget.existing?.id ?? '',
         name: name,
         price: price,
-        category: _category ?? '',
+        category: category,
         imageUrl: _imageUrl,
         description: _descCtr.text.trim(),
+        fandomId: fandom?.id ?? (_fandomTouched ? '' : widget.existing?.fandomId ?? ''),
+        fandomName:
+            fandom?.name ?? (_fandomTouched ? '' : widget.existing?.fandomName ?? ''),
       );
       if (widget.existing == null) {
         await MerchandiseService.instance.addMerchandise(item);

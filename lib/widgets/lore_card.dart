@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../models/post.dart';
+import '../services/auth_service.dart';
 import '../screens/explore/fandom_detail_screen.dart';
 import '../theme/app_theme.dart';
+import '../utils/levels.dart';
 import '../utils/youtube_utils.dart';
 import 'trending_badge.dart';
+import '../screens/explore/video_player_screen.dart';
 
 /// Shared post/lore card used across the Category Detail, content-type
 /// filter, and Explore Latest list screens — mirrors the card styling
@@ -16,8 +19,8 @@ class LoreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final badge =
-        post.category.isEmpty ? 'LORE ARCHIVE' : post.category.toUpperCase();
+    final label = post.fandomName.isNotEmpty ? post.fandomName : post.category;
+    final badge = label.isEmpty ? 'LORE ARCHIVE' : label.toUpperCase();
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -55,6 +58,8 @@ class LoreCard extends StatelessWidget {
                 ),
               ),
               Positioned(top: 8, right: 8, child: TrendingBadge(postId: post.id)),
+              if (post.contentDepth == 'deep')
+                Positioned(left: 8, bottom: 8, child: const DeepDiveLockBadge()),
             ],
           ),
           Padding(
@@ -88,7 +93,7 @@ class LoreCard extends StatelessWidget {
                           const SizedBox(width: 4),
                           Flexible(
                             child: Text(
-                              post.category.toUpperCase(),
+                              label.toUpperCase(),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style:
@@ -180,6 +185,7 @@ class _PostMediaThumbnailState extends State<PostMediaThumbnail> {
       _videoError = true;
       return;
     }
+    _videoId = videoId;
     _controller = YoutubePlayerController.fromVideoId(
       videoId: videoId,
       autoPlay: true,
@@ -187,6 +193,8 @@ class _PostMediaThumbnailState extends State<PostMediaThumbnail> {
         if (value.hasError && mounted) setState(() => _videoError = true);
       });
   }
+
+  String? _videoId;
 
   @override
   void dispose() {
@@ -198,7 +206,7 @@ class _PostMediaThumbnailState extends State<PostMediaThumbnail> {
   Widget build(BuildContext context) {
     final Widget content;
     if (widget.post.hasVideo && _controller != null && !_videoError) {
-      content = YoutubePlayerThumbnail(
+      final thumbnail = YoutubePlayerThumbnail(
         controller: _controller!,
         backgroundColor: AppTheme.bg,
         playIcon: Container(
@@ -211,6 +219,27 @@ class _PostMediaThumbnailState extends State<PostMediaThumbnail> {
               color: Colors.white, size: widget.playIconSize),
         ),
       );
+      // Full-screen button, except on tiny thumbnails (Home's post rows),
+      // where it would cover the video; those rows open the post page,
+      // which has one.
+      final roomy = widget.height == null || widget.height! >= 110;
+      content = !roomy
+          ? thumbnail
+          : Stack(fit: StackFit.expand, children: [
+              thumbnail,
+              Positioned(
+                right: 8,
+                bottom: 8,
+                child: FullScreenVideoButton(
+                  onPressed: () => openFullScreenVideo(
+                    context,
+                    videoId: _videoId!,
+                    title: widget.post.title,
+                    inline: _controller,
+                  ),
+                ),
+              ),
+            ]);
     } else if (widget.post.hasVideo && _videoError) {
       content = _errorPlaceholder();
     } else {
@@ -247,5 +276,38 @@ class _PostMediaThumbnailState extends State<PostMediaThumbnail> {
                 style: AppTheme.inter(size: 10, color: Colors.white38)),
           ],
         ),
+      );
+}
+
+/// Lock badge on Deep Dive cards while the viewer is below Level 4
+/// (hidden for admins and for fans who have unlocked Deep Dive).
+class DeepDiveLockBadge extends StatelessWidget {
+  const DeepDiveLockBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<UserData?>(
+        valueListenable: AuthService.instance.userNotifier,
+        builder: (context, user, _) {
+          final open = canOpenDeepDive(
+              signedIn: user != null, isAdmin: user?.isAdmin ?? false, xp: user?.xp ?? 0);
+          if (open) return const SizedBox.shrink();
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.75),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppTheme.orange.withValues(alpha: 0.8)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_rounded, color: AppTheme.orange, size: 12),
+                const SizedBox(width: 4),
+                Text('Level $kDeepDiveLevel',
+                    style: AppTheme.inter(size: 10, color: Colors.white, weight: FontWeight.w700)),
+              ],
+            ),
+          );
+        },
       );
 }

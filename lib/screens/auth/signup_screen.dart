@@ -5,6 +5,7 @@ import '../../services/first_run_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/validators.dart';
+import 'login_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -19,6 +20,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _emailController = TextEditingController();
   final _passController = TextEditingController();
   bool _loading = false;
+  bool _submitted = false;
   String? _errorMessage;
 
   @override
@@ -29,8 +31,17 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
+  @override
+  void initState() {
+    super.initState();
+    _passController.addListener(() => setState(() {}));
+  }
+
   Future<void> _signup() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _submitted = true);
+      return;
+    }
     setState(() { _loading = true; _errorMessage = null; });
     try {
       await AuthService.instance.register(
@@ -67,6 +78,37 @@ class _SignupScreenState extends State<SignupScreen> {
     } catch (_) {
       AuthService.instance.userNotifier.value = user;
     }
+  }
+
+  Widget _passwordChecklist() {
+    final c = Validators.passwordChecks(_passController.text);
+    Widget item(bool ok, String text) => Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(
+            children: [
+              Icon(ok ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+                  size: 15, color: ok ? Colors.greenAccent : Colors.grey),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(text,
+                    style: AppTheme.inter(
+                        size: 12, color: ok ? Colors.white : Colors.grey)),
+              ),
+            ],
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          item(c.length, '8+ characters'),
+          item(c.letter, 'A letter'),
+          item(c.number, 'A number'),
+          item(c.special, 'A special character (! @ # \$ …)'),
+        ],
+      ),
+    );
   }
 
   String _friendlyError(String code) {
@@ -117,6 +159,9 @@ class _SignupScreenState extends State<SignupScreen> {
                       padding: const EdgeInsets.all(24.0),
                       child: Form(
                         key: _formKey,
+                        autovalidateMode: _submitted
+                            ? AutovalidateMode.always
+                            : AutovalidateMode.disabled,
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -193,9 +238,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
                             TextFormField(
                               controller: _nameController,
-                              validator: (v) => v == null || v.trim().isEmpty
-                                  ? 'Full Name required'
-                                  : null,
+                              validator: Validators.validateName,
                               style: const TextStyle(color: Colors.white),
                               decoration: const InputDecoration(
                                 prefixIcon: Icon(Icons.person_outline,
@@ -219,7 +262,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             TextFormField(
                               controller: _passController,
                               obscureText: true,
-                              validator: Validators.validatePassword,
+                              validator: Validators.validateNewPassword,
                               style: const TextStyle(color: Colors.white),
                               decoration: const InputDecoration(
                                 prefixIcon: Icon(Icons.lock_outline,
@@ -227,6 +270,8 @@ class _SignupScreenState extends State<SignupScreen> {
                                 hintText: 'Password',
                               ),
                             ),
+                            const SizedBox(height: 10),
+                            _passwordChecklist(),
                             const SizedBox(height: 24),
 
                             ElevatedButton(
@@ -258,7 +303,13 @@ class _SignupScreenState extends State<SignupScreen> {
                                     style: TextStyle(
                                         color: Colors.grey, fontSize: 13)),
                                 GestureDetector(
-                                  onTap: () => Navigator.pop(context),
+                                  // Replace (not pop): this screen is also
+                                  // opened directly from Home / the guest
+                                  // prompt, where "back" isn't Login.
+                                  onTap: () => Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                  ),
                                   child: const Text('Log In',
                                       style: TextStyle(
                                           color: AppTheme.cyan,

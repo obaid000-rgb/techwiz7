@@ -4,6 +4,7 @@ import '../../models/merchandise.dart';
 import '../../services/auth_service.dart';
 import '../../services/category_service.dart';
 import '../../theme/app_theme.dart';
+import '../fandoms/fandom_page_screen.dart';
 import 'cart_screen.dart';
 import 'shop_tab.dart';
 
@@ -56,6 +57,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _categoryChip(item.category),
+                  if (item.hasFandom) ...[
+                    const SizedBox(height: 8),
+                    FandomLinkChip(fandomId: item.fandomId, label: item.fandomName),
+                  ],
                   const SizedBox(height: 12),
                   Text(item.name,
                       style: const TextStyle(

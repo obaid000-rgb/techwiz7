@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../controllers/beginner_hub/beginner_hub_controller.dart';
 import '../../models/app_category.dart';
 import '../../models/glossary_term.dart';
 import '../../services/category_service.dart';
@@ -44,6 +45,7 @@ class _GlossaryScreenState extends State<GlossaryScreen> {
   @override
   void initState() {
     super.initState();
+    BeginnerHubController.markGlossaryOpened();
     _searchCtr.addListener(() {
       final q = _searchCtr.text.trim().toLowerCase();
       if (q != _query) setState(() => _query = q);

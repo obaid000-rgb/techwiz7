@@ -3,6 +3,9 @@ import '../../../services/auth_service.dart';
 import '../../../services/firestore_db.dart';
 import '../../../services/user_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../utils/levels.dart';
+import '../../../utils/validators.dart';
+import '../../../widgets/avatar_view.dart';
 
 class UserManagementScreen extends StatelessWidget {
   const UserManagementScreen({super.key});
@@ -99,17 +102,7 @@ class UserManagementScreen extends StatelessWidget {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: isAdmin
-                ? AppTheme.orange.withValues(alpha: 0.2)
-                : AppTheme.accent.withValues(alpha: 0.2),
-            child: Icon(
-              isAdmin ? Icons.admin_panel_settings : Icons.person_outline,
-              color: isAdmin ? AppTheme.orange : AppTheme.accent,
-              size: 20,
-            ),
-          ),
+          AvatarView.user(user, radius: 20),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -271,19 +264,23 @@ class _UserEditDialog extends StatefulWidget {
 
 class _UserEditDialogState extends State<_UserEditDialog> {
   late final TextEditingController _nameCtr;
+  late final TextEditingController _xpCtr;
   late String _role;
   bool _saving = false;
+  bool _nameAttempted = false;
 
   @override
   void initState() {
     super.initState();
     _nameCtr = TextEditingController(text: widget.user.name);
+    _xpCtr = TextEditingController(text: '${widget.user.xp}');
     _role = widget.user.role;
   }
 
   @override
   void dispose() {
     _nameCtr.dispose();
+    _xpCtr.dispose();
     super.dispose();
   }
 
@@ -309,8 +306,13 @@ class _UserEditDialogState extends State<_UserEditDialog> {
             const SizedBox(height: 4),
             TextField(
               controller: _nameCtr,
+              onChanged: (_) {
+                if (_nameAttempted) setState(() {});
+              },
               style: AppTheme.inter(size: 13, color: Colors.white),
               decoration: InputDecoration(
+                errorText: _nameAttempted ? _nameError : null,
+                errorMaxLines: 2,
                 filled: true,
                 fillColor: AppTheme.bg,
                 isDense: true,
@@ -369,6 +371,36 @@ class _UserEditDialogState extends State<_UserEditDialog> {
                 );
               }).toList(),
             ),
+            const SizedBox(height: 14),
+            Text('XP (Level ${levelFor(int.tryParse(_xpCtr.text.trim()) ?? widget.user.xp)})',
+                style: AppTheme.inter(size: 11, color: Colors.grey)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _xpCtr,
+              keyboardType: TextInputType.number,
+              onChanged: (_) => setState(() {}),
+              style: AppTheme.inter(size: 13, color: Colors.white),
+              decoration: InputDecoration(
+                hintText: '0',
+                helperText: '100 · 250 · 500 (Deep Dive) · 1000 (max)',
+                helperStyle: AppTheme.inter(size: 10, color: Colors.grey),
+                errorText: _xpError,
+                filled: true,
+                fillColor: AppTheme.bg,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppTheme.border)),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppTheme.border)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppTheme.accent)),
+              ),
+            ),
           ],
         ),
       ),
@@ -394,7 +426,26 @@ class _UserEditDialogState extends State<_UserEditDialog> {
     );
   }
 
+  String? get _nameError => _nameCtr.text.trim() == widget.user.name.trim()
+      ? null
+      : Validators.validateName(_nameCtr.text);
+
+  String? get _xpError {
+    final v = int.tryParse(_xpCtr.text.trim());
+    if (v == null || v < 0 || v > 1000000) return 'Enter a whole number from 0 to 1,000,000';
+    return null;
+  }
+
   Future<void> _save() async {
+    if (_nameError != null) {
+      setState(() => _nameAttempted = true);
+      return;
+    }
+    if (_xpError != null) {
+      setState(() {});
+      return;
+    }
+    final xp = int.parse(_xpCtr.text.trim());
     setState(() => _saving = true);
     try {
       // Write only the fields this dialog edits. A full UserData.toMap()
@@ -405,6 +456,7 @@ class _UserEditDialogState extends State<_UserEditDialog> {
           .update({
         'name': _nameCtr.text.trim(),
         'role': _role,
+        if (xp != widget.user.xp) 'xp': xp,
       });
       if (mounted) Navigator.pop(context);
     } catch (e) {

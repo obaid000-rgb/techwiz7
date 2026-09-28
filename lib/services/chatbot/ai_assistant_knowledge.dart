@@ -40,14 +40,14 @@ Navigation
 Getting started and accounts
 - First launch: an intro carousel ("Skip", "NEXT", "GET STARTED"), then a screen to pick your interests (fandoms) and a badge (Newcomer, Enthusiast, Veteran or Collector) and tap "START EXPLORING". You can then browse as a guest.
 - Picks made before signing up are applied when you register a new account on that device. Logging in to an existing account keeps that account's saved fandoms.
-- Log In screen: email, password, "Forgot Password?", "LOG IN", and "Sign Up" to create an account. "Continue with Google" is not available yet (it shows "coming soon").
+- Log In screen: email, password, "Forgot Password?", "LOG IN", and "Sign Up" to create an account. "Continue with Google" signs in with a Google account (the first time, it creates your Fandom Verse account using your Google name and photo).
 - Create account: Full Name, Email Address, Password (at least 6 characters), "REGISTER NOW".
 - Forgot password: enter your email, tap "SEND LINK", then check your email for the reset link.
 - Guests can browse Home, Lore, Events, the Shop, product details, the Glossary and posts, and save posts for offline. An account is needed to bookmark posts, heart fandoms, use the wishlist or cart, check out, and open Profile — the app shows a "Sign In Required" prompt with "LOG IN" and "CREATE ACCOUNT".
 - Notifications: once per install the app shows "Stay in the loop" with "TURN ON NOTIFICATIONS" or "Not now", then the phone's permission prompt.
 
 Home tab
-- "Search posts on Home" (top, Home tab only) filters the Home posts by title or text as you type; the X clears it.
+- The search bar "Search the Fandom Verse..." (top, Home tab only) filters the Home posts by title or text as you type; the X clears it.
 - A carousel of featured fandoms (arrows to move, tap to open the fandom's page), then "FEATURED FANDOMS" cards showing how many posts each has.
 - Heart button on a fandom card adds/removes it from My Fandoms ("Added X to My Fandoms"). You must keep at least one fandom.
 - A fandom's page shows its banner, description and all its posts ("Read Archive" opens one).
@@ -70,13 +70,14 @@ Lore tab
 - "BROWSE BY TYPE": News, Gallery, Video, Podcast — each opens posts of that type.
 
 Events tab
-- Shows upcoming fan conventions and meetups only (past events are hidden).
+- Shows upcoming and ongoing fan events only (events that have ended are hidden; a multi-day convention stays until its last day ends). Each event card shows its type (Convention, Cosplay Meetup, Screening, Tournament or Event) and a green "HAPPENING NOW" badge while it is on.
 - Switch views with "List", "Map" or "Calendar".
   - Map: tap a pin to open the event.
-  - Calendar: days with a pink dot have events; tap a day to see its events below ("No events on this day" if none). You can browse to other months.
+  - Calendar: days with a pink dot have events (a multi-day event is marked on each of its days); tap a day to see its events below ("No events on this day" if none). You can browse to other months.
 - Events near you: allow location and the list is sorted nearest first ("Near <city> · sorted by distance", with "X km away" on each event). The app doesn't ask for location on its own; tap "Turn on" in the banner. If location isn't available, a banner explains why and offers the fix: "Try again" (permission was denied), "Open settings" (location is blocked for the app — allow it in Settings > Permissions > Location), "Turn on GPS" (the phone's location is off). All events are still listed either way.
-- City filter: tap "All cities (nearby first)" above the list, pick a city (you can search). That city's events show in date order in List, Map and Calendar. Tap "Back to nearby" to clear it.
-- Event details: date, place, price (or "Free"). "GET TICKETS" opens the official ticket page in your browser; if there's no link yet the button says "Ticket link not available yet". Tickets are not sold inside the app, and events can't be saved or RSVP'd in the app.
+- Filters: above the list there is a search box (event name, venue, city or organizer), type chips ("All", Convention, Cosplay Meetup, Screening, Tournament, Other) and a "Filter" button. The Filter sheet has Date (Any date, Today, This week, This month), Distance (Within 10/25/50/100 km; needs location, otherwise it says "Turn on location to filter by distance"), City, "My fandoms" (signed-in fans: only events linked to fandoms you follow) and "Clear all". Filters apply to List, Map and Calendar. Map pins are coloured by event type, with a legend under the map.
+- Event details: type, start and end time, venue and address, organizer, price, and an "Agenda" of sessions grouped by day (time, title, stage, description) when the organizer has added one. "GET TICKETS" opens the official ticket page in your browser; if there's no link yet the button says "Ticket link not available yet". Tickets are not sold inside the app.
+- My Agenda: tap the bookmark on an event card or "Save to My Agenda" on Event Detail (needs an account) to save it; each event shows "X interested". Open My Agenda from the icon next to the Events title or the "Agenda" number on Profile. Saved events, their cover and full agenda work offline; offline the ticket button says "Needs internet". If an event is taken down, it stays in My Agenda marked "This event is no longer listed".
 
 Shop tab
 - Official merchandise. Filter with the category chips ("All" or a category) and sort with the sort button: "Featured", "Price: Low to High", "Price: High to Low".
@@ -93,13 +94,14 @@ Profile tab (needs an account)
 - Your photo, name, email, badge and bio. "Edit Profile" lets you change your photo ("Tap the photo to change it"), name and bio (email can't be changed there); tap "SAVE" or "SAVE CHANGES", or Cancel.
 - "My Fandoms" card: tap "Edit" to change the fandoms you follow, then "SAVE" (at least one).
 - "YOUR LIBRARY": "Bookmarks" (needs internet; removing one offers "UNDO") and "Offline Downloads" (works without internet).
-- "ACCOUNT": "Purchase history" (your orders; open one to see its receipt and invoice) and "Notifications".
+- "ACCOUNT": "Purchase history" (your orders; open one to see its receipt and invoice), "Notifications", "About Us" and "Contact Us". Guests find "About Us" and "Contact Us" links at the bottom of the Profile tab.
+- Contact Us: a form to send the team a message (Full Name, Email, Subject, Message, then "SEND MESSAGE"; works for guests too, and if you are offline it is sent automatically once you reconnect), plus the team's contact details and office location with "Open in Google Maps" and "Get Directions" when they are published.
 - "LOG OUT" is at the bottom of the Profile tab.
-- The Profile stats "Events" and "Fan rank" are placeholders and don't change yet.
+- Profile stats: "Following", "Saved", "Wishlist" and "Agenda"; tap a number to open that list.
 
 Notifications
 - Two kinds: announcements from the Fandom Verse team (push notifications on Android) and wishlist price alerts.
 - Past notifications are listed in Profile > "Notifications". If notifications are off, that screen shows a "TURN ON" button.
 
-Things the app does not do (say so if asked): real payments or delivery, selling event tickets in-app, Google sign-in (coming soon), chat between fans, posting your own content, changing your email.
+Things the app does not do (say so if asked): real payments or delivery, selling event tickets in-app, chat between fans, posting your own content, changing your email.
 ''';

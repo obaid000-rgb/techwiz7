@@ -1,1 +1,25 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"fandom-verse-pocket-2026","appId":"1:65975142578:android:98fa18fa8956021900a1ab","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"fandom-verse-pocket-2026","configurations":{"android":"1:65975142578:android:98fa18fa8956021900a1ab","web":"1:65975142578:web:91173f2258a18e4d00a1ab"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "fandom-verse-pocket-2026",
+          "appId": "1:65975142578:android:98fa18fa8956021900a1ab",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "fandom-verse-pocket-2026",
+          "configurations": {
+            "android": "1:65975142578:android:98fa18fa8956021900a1ab",
+            "web": "1:65975142578:web:91173f2258a18e4d00a1ab"
+          }
+        }
+      }
+    }
+  }
+}

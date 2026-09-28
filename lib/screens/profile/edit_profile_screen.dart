@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/image_upload_field.dart';
+import '../../utils/validators.dart';
+import '../../widgets/avatar_view.dart';
+import '../../widgets/image_upload_field.dart' show pickAndUploadImage;
+import 'choose_avatar_screen.dart';
 
 /// Instagram-style Edit Profile: name, bio and avatar. Nothing is written to
 /// Firestore until SAVE; backing out discards the changes.
@@ -21,7 +24,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _nameCtr = TextEditingController(text: widget.user.name);
   late final TextEditingController _bioCtr = TextEditingController(text: widget.user.bio);
   late String _avatarUrl = widget.user.avatarUrl;
+  late String _presetId = widget.user.avatarPresetId;
+  bool _uploading = false;
   bool _saving = false;
+  bool _nameAttempted = false;
   String? _error;
 
   @override
@@ -43,12 +49,84 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   String get _name => _nameCtr.text.trim();
   String get _bio => _bioCtr.text.trim();
 
-  bool get _dirty =>
-      _name != widget.user.name || _bio != widget.user.bio || _avatarUrl != widget.user.avatarUrl;
+  bool get _avatarChanged =>
+      _avatarUrl != widget.user.avatarUrl || _presetId != widget.user.avatarPresetId;
+
+  bool get _dirty => _name != widget.user.name || _bio != widget.user.bio || _avatarChanged;
+
+  Future<void> _showAvatarOptions() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppTheme.card,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined, color: AppTheme.cyan),
+              title: Text('Upload a photo', style: AppTheme.inter(size: 14)),
+              onTap: () => Navigator.pop(ctx, 'upload'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.face_retouching_natural, color: AppTheme.cyan),
+              title: Text('Choose an avatar', style: AppTheme.inter(size: 14)),
+              onTap: () => Navigator.pop(ctx, 'choose'),
+            ),
+            if (_avatarUrl.isNotEmpty || _presetId.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                title: Text('Remove photo', style: AppTheme.inter(size: 14, color: Colors.redAccent)),
+                onTap: () => Navigator.pop(ctx, 'remove'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'upload':
+        setState(() => _uploading = true);
+        try {
+          final url = await pickAndUploadImage(context, accentColor: AppTheme.cyan);
+          if (url != null && mounted) {
+            setState(() {
+              _avatarUrl = url;
+              _presetId = '';
+            });
+          }
+        } catch (e) {
+          debugPrint('Avatar upload failed: $e');
+          if (mounted) setState(() => _error = 'Upload failed. Check your connection and try again.');
+        } finally {
+          if (mounted) setState(() => _uploading = false);
+        }
+      case 'choose':
+        final choice = await Navigator.push<AvatarChoice>(
+          context,
+          MaterialPageRoute(builder: (_) => ChooseAvatarScreen(name: _name)),
+        );
+        if (choice != null && mounted) {
+          setState(() {
+            _presetId = choice.presetId;
+            _avatarUrl = choice.imageUrl;
+          });
+        }
+      case 'remove':
+        setState(() {
+          _avatarUrl = '';
+          _presetId = '';
+        });
+    }
+  }
+
+  String? get _nameError => _name == widget.user.name.trim()
+      ? null
+      : Validators.validateName(_name);
 
   Future<void> _save() async {
-    if (_name.isEmpty) {
-      setState(() => _error = 'Name can\'t be empty.');
+    if (_nameError != null) {
+      setState(() => _nameAttempted = true);
       return;
     }
     if (!_dirty) {
@@ -66,11 +144,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         original.uid,
         name: _name != original.name ? _name : null,
         bio: _bio != original.bio ? _bio : null,
-        avatarUrl: _avatarUrl != original.avatarUrl ? _avatarUrl : null,
+        avatarUrl: _avatarChanged ? _avatarUrl : null,
+        avatarPresetId: _avatarChanged ? _presetId : null,
       );
       final current = AuthService.instance.currentUser ?? original;
-      AuthService.instance.userNotifier.value =
-          current.copyWith(name: _name, bio: _bio, avatarUrl: _avatarUrl);
+      AuthService.instance.userNotifier.value = current.copyWith(
+          name: _name, bio: _bio, avatarUrl: _avatarUrl, avatarPresetId: _presetId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile updated'), duration: Duration(seconds: 2)),
@@ -158,12 +237,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
                 children: [
-                  ImageUploadField(
-                    initialUrl: _avatarUrl.isEmpty ? null : _avatarUrl,
-                    onUploaded: (url) => setState(() => _avatarUrl = url),
-                    accentColor: AppTheme.cyan,
-                    isCircular: true,
-                    circleRadius: 52,
+                  Center(
+                    child: GestureDetector(
+                      onTap: _uploading ? null : _showAvatarOptions,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          AvatarView(
+                            name: _name,
+                            avatarUrl: _avatarUrl,
+                            avatarPresetId: _presetId,
+                            radius: 52,
+                          ),
+                          if (_uploading)
+                            const SizedBox(
+                              width: 104,
+                              height: 104,
+                              child: CircularProgressIndicator(strokeWidth: 3, color: AppTheme.cyan),
+                            ),
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(color: AppTheme.cyan, shape: BoxShape.circle),
+                              child: const Icon(Icons.edit, size: 16, color: Colors.black),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Center(
@@ -193,7 +296,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     const SizedBox(height: 16),
                   ],
                   _label('Name'),
-                  _field(_nameCtr, hint: 'Your display name', maxLength: _maxName, maxLines: 1),
+                  _field(_nameCtr,
+                      hint: 'Your display name',
+                      maxLength: _maxName,
+                      maxLines: 1,
+                      errorText: _nameAttempted ? _nameError : null),
                   const SizedBox(height: 14),
                   _label('Bio'),
                   _field(_bioCtr,
@@ -261,7 +368,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       );
 
   Widget _field(TextEditingController ctrl,
-          {required String hint, required int maxLength, required int maxLines}) =>
+          {required String hint,
+          required int maxLength,
+          required int maxLines,
+          String? errorText}) =>
       TextField(
         controller: ctrl,
         maxLength: maxLength,
@@ -270,6 +380,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         textCapitalization:
             maxLines == 1 ? TextCapitalization.words : TextCapitalization.sentences,
         style: AppTheme.inter(size: 14, color: Colors.white),
-        decoration: InputDecoration(hintText: hint),
+        decoration: InputDecoration(hintText: hint, errorText: errorText),
       );
 }

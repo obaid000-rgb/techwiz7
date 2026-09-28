@@ -9,6 +9,16 @@ import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/category_icons.dart';
 
+/// Categories offered on the interest step: active categories flagged
+/// "show in onboarding", in display order. If none is flagged, the first 6
+/// active ones instead, so the screen is never empty and never shows all.
+List<AppCategory> onboardingCategories(List<AppCategory> all) {
+  final active = all.where((c) => c.isActive).toList()
+    ..sort((a, b) => a.order.compareTo(b.order));
+  final flagged = active.where((c) => c.showInOnboarding).toList();
+  return flagged.isNotEmpty ? flagged : active.take(6).toList();
+}
+
 /// Collects interests (categories) and a profile badge. Two modes:
 /// - [OnboardingScreen]: signed-in user with no saved categories (see
 ///   UserData.hasOnboarded) — writes both to their Firestore user document.
@@ -371,8 +381,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             ),
           );
         }
-        final cats = List<AppCategory>.from(snapshot.data ?? [])
-          ..sort((a, b) => a.order.compareTo(b.order));
+        final cats = onboardingCategories(snapshot.data ?? const []);
         if (cats.isEmpty) return _notice(Icons.category_outlined, 'No categories available yet.');
 
         final cols = width >= 600 ? 5 : (width >= 400 ? 4 : 3);
@@ -385,8 +394,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             for (var i = 0; i < cats.length; i++)
               _GlassChoiceCard(
                 width: cardW,
-                height: cardW * 0.8,
+                height: math.max(cardW * 0.8, 104),
                 icon: categoryIcon(cats[i]),
+                imageUrl: cats[i].imageUrl,
                 label: cats[i].name,
                 glow: i.isEven ? AppTheme.accent : AppTheme.cyan,
                 selected: _selectedCategoryKeys.contains(cats[i].key),
@@ -443,7 +453,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget _startButton() => _GlowButton(
         label: 'START EXPLORING',
         loading: _saving,
-        onPressed: _saving ? null : _finish,
+        onPressed: _saving ||
+                _selectedCategoryKeys.isEmpty ||
+                _selectedBadge == null
+            ? null
+            : _finish,
         shimmer: _bgCtrl,
       );
 }
@@ -559,6 +573,7 @@ class _GlassChoiceCard extends StatefulWidget {
   final double width;
   final double height;
   final IconData icon;
+  final String? imageUrl;
   final String label;
   final Color glow;
   final bool selected;
@@ -568,6 +583,7 @@ class _GlassChoiceCard extends StatefulWidget {
     required this.width,
     required this.height,
     required this.icon,
+    this.imageUrl,
     required this.label,
     required this.glow,
     required this.selected,
@@ -580,6 +596,23 @@ class _GlassChoiceCard extends StatefulWidget {
 
 class _GlassChoiceCardState extends State<_GlassChoiceCard> {
   bool _pressed = false;
+
+  Widget _visual(bool sel, Color glow) {
+    final icon = Icon(widget.icon,
+        size: 28, color: sel ? Colors.white : glow.withValues(alpha: 0.9));
+    final url = widget.imageUrl;
+    if (url == null || url.isEmpty) return icon;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        url,
+        width: 34,
+        height: 34,
+        fit: BoxFit.cover,
+        errorBuilder: (ctx, e, st) => icon,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -648,13 +681,11 @@ class _GlassChoiceCardState extends State<_GlassChoiceCard> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(widget.icon,
-                                  size: 28,
-                                  color: sel ? Colors.white : glow.withValues(alpha: 0.9)),
+                              _visual(sel, glow),
                               const SizedBox(height: 8),
                               Text(
                                 widget.label,
-                                maxLines: 1,
+                                maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 textAlign: TextAlign.center,
                                 style: AppTheme.inter(

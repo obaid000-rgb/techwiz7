@@ -20,6 +20,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
   String? _imageUrl;
   String _status = 'active';
   bool _isFeaturedInCarousel = false;
+  bool _showInOnboarding = false;
   bool _saving = false;
   String? _error;
   bool _keyEdited = false;
@@ -35,6 +36,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
     _imageUrl = e?.imageUrl;
     _status = e?.status ?? 'active';
     _isFeaturedInCarousel = e?.isFeaturedInCarousel ?? false;
+    _showInOnboarding = e?.showInOnboarding ?? false;
     if (e != null) _keyEdited = true;
 
     _nameCtr.addListener(() {
@@ -101,6 +103,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
           order: nextOrder,
           description: _descriptionCtr.text.trim(),
           isFeaturedInCarousel: _isFeaturedInCarousel,
+          showInOnboarding: _showInOnboarding,
         ));
       } else {
         await CategoryService.instance.updateCategory(
@@ -111,6 +114,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
             order: order,
             description: _descriptionCtr.text.trim(),
             isFeaturedInCarousel: _isFeaturedInCarousel,
+            showInOnboarding: _showInOnboarding,
           ),
         );
       }
@@ -273,6 +277,45 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                     value: _isFeaturedInCarousel,
                     activeThumbColor: AppTheme.cyan,
                     onChanged: (val) => setState(() => _isFeaturedInCarousel = val),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // ── Show in onboarding ─────────────────────────────────────
+            // Only active categories are ever offered to new fans; if no
+            // category has this on, the first 6 active ones are shown.
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.accent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.accent.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.waving_hand_outlined,
+                      color: AppTheme.accent, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Show in onboarding',
+                            style: AppTheme.inter(
+                                size: 13, color: Colors.white, weight: FontWeight.w600)),
+                        Text(
+                            'Offer this category on the new-fan "Your Interests" screen. '
+                            'If none is on, the first 6 active categories are shown.',
+                            style: AppTheme.inter(size: 10, color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _showInOnboarding,
+                    activeThumbColor: AppTheme.accent,
+                    onChanged: (val) => setState(() => _showInOnboarding = val),
                   ),
                 ],
               ),

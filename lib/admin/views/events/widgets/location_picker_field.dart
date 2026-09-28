@@ -6,11 +6,13 @@ import '../../../../theme/app_theme.dart';
 
 /// OSM map the admin taps to place (or re-tap to move) a pin for an event's
 /// location, or jumps to their own GPS position via the locate button.
-/// Reverse-geocodes the pin to a city name on every placement.
+/// Reverse-geocodes the pin to a city name and street address on every
+/// placement.
 class LocationPickerField extends StatefulWidget {
   final double? initialLat;
   final double? initialLng;
-  final void Function(double lat, double lng, String? city) onLocationPicked;
+  final void Function(double lat, double lng, String? city, String? address)
+      onLocationPicked;
 
   const LocationPickerField({
     super.key,
@@ -43,11 +45,11 @@ class _LocationPickerFieldState extends State<LocationPickerField> {
       _pin = point;
       _resolvingCity = true;
     });
-    final city =
-        await LocationService.instance.reverseGeocodeCity(point.latitude, point.longitude);
+    final place =
+        await LocationService.instance.reverseGeocodeAddress(point.latitude, point.longitude);
     if (!mounted) return;
     setState(() => _resolvingCity = false);
-    widget.onLocationPicked(point.latitude, point.longitude, city);
+    widget.onLocationPicked(point.latitude, point.longitude, place.city, place.address);
   }
 
   Future<void> _onTap(TapPosition tapPos, LatLng point) => _placePin(point);
@@ -140,7 +142,7 @@ class _LocationPickerFieldState extends State<LocationPickerField> {
         const SizedBox(height: 6),
         Text(
           _resolvingCity
-              ? 'Finding city name…'
+              ? 'Finding city and address…'
               : _pin == null
                   ? 'Tap the map (or use the locate button) to drop a pin for this event\'s location.'
                   : 'Pinned at ${_pin!.latitude.toStringAsFixed(4)}, '

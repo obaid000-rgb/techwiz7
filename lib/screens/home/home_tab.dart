@@ -1,17 +1,24 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../models/app_category.dart';
+import '../../models/event_item.dart';
 import '../../models/post.dart';
 import '../../services/auth_service.dart';
 import '../../services/category_service.dart';
+import '../../services/event_service.dart';
+import '../../services/first_run_service.dart';
 import '../../services/post_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import 'widgets/fandom_heart_button.dart';
 import '../../widgets/lore_card.dart';
 import '../../widgets/trending_badge.dart';
+import 'widgets/from_your_fandoms_section.dart';
+import 'widgets/new_fan_card.dart';
 import 'widgets/trending_carousel.dart';
 import '../explore/category_detail_screen.dart';
 import '../explore/fandom_detail_screen.dart';
+import '../events/widgets/event_card.dart';
 
 class HomeTab extends StatefulWidget {
   final String searchQuery;
@@ -28,6 +35,52 @@ class _HomeTabState extends State<HomeTab> {
   late final Stream<List<AppCategory>> _categories =
       CategoryService.instance.watchActiveCategories();
   late final Stream<List<Post>> _posts = PostService.instance.watchActivePosts();
+
+  // Trending Events: subscribed once and held in state rather than a
+  // StreamBuilder inside the ListView, so list rebuilds never resubscribe.
+  StreamSubscription<List<EventItem>>? _trendingSub;
+  List<EventItem> _trendingEvents = const [];
+
+  // "Based on your interests": a guest's picks live only in the on-device
+  // first-run cache (no Firestore profile yet); a signed-in fan's come from
+  // their profile (UserData.categories). Home rebuilds when either changes.
+  List<String> _guestInterests = const [];
+
+  void _onUserChanged() {
+    if (AuthService.instance.currentUser == null) {
+      _loadGuestInterests();
+    } else if (mounted) {
+      setState(() {}); // e.g. fandoms edited in Profile
+    }
+  }
+
+  Future<void> _loadGuestInterests() async {
+    final pending = await FirstRunService.instance.readPending();
+    if (mounted) setState(() => _guestInterests = pending?.categories ?? const []);
+  }
+
+  List<String> get _interests =>
+      AuthService.instance.currentUser?.categories ?? _guestInterests;
+
+  @override
+  void initState() {
+    super.initState();
+    AuthService.instance.userNotifier.addListener(_onUserChanged);
+    _loadGuestInterests();
+    _trendingSub = EventService.instance.watchTrendingEvents().listen(
+      (events) {
+        if (mounted) setState(() => _trendingEvents = events);
+      },
+      onError: (Object e) => debugPrint('Trending events load error: $e'),
+    );
+  }
+
+  @override
+  void dispose() {
+    AuthService.instance.userNotifier.removeListener(_onUserChanged);
+    _trendingSub?.cancel();
+    super.dispose();
+  }
 
   Future<void> _toggleBookmark(String postId) async {
     final user = AuthService.instance.currentUser;
@@ -81,9 +134,24 @@ class _HomeTabState extends State<HomeTab> {
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
               children: [
+                // New fans: "Start here" → Beginner Fan Hub (hides when done).
+                const NewFanCard(),
+
                 // Admin-curated slider stays on top.
+                _sectionTitle('TRENDING FANDOMS', 'Hot right now across Fandom Verse'),
+                const SizedBox(height: 12),
                 const TrendingCarousel(),
                 const SizedBox(height: 28),
+
+                const FromYourFandomsSection(),
+
+                // Admin-flagged upcoming events; the whole section is hidden
+                // when none are flagged. Re-checked by day so an event that
+                // passes while the app is open drops off.
+                ..._trendingEventsSection(),
+
+                // Personalised: posts from the fandoms the fan picked.
+                ..._interestsSection(postSnap, allPosts, catNames),
 
                 if (cats.isNotEmpty) ...[
                   _sectionTitle('FEATURED FANDOMS', 'Tap a fandom to see all its posts'),
@@ -128,6 +196,84 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   // ── Sections ──────────────────────────────────────────────────────────────
+
+  /// Newest posts from the fan's picked fandoms, shown with the shared
+  /// LoreCard in a horizontal strip. Reuses Home's existing active-posts
+  /// stream (the same "filter by category key" the chips and Category
+  /// Detail use) — no extra query. Interests pointing at categories that
+  /// no longer exist/are inactive are ignored.
+  List<Widget> _interestsSection(
+      AsyncSnapshot<List<Post>> postSnap, List<Post> allPosts, Map<String, String> catNames) {
+    if (!postSnap.hasData || catNames.isEmpty) return const []; // still loading
+    final keys = [for (final k in _interests) if (catNames.containsKey(k)) k];
+    final names = [for (final k in keys) catNames[k]!];
+
+    final String subtitle;
+    final List<Widget> body;
+    if (keys.isEmpty) {
+      subtitle = 'Pick the fandoms you love to get a personalised feed';
+      body = [
+        _message(
+          Icons.favorite_border,
+          'No interests picked yet',
+          AuthService.instance.currentUser != null
+              ? 'Tap the heart on any fandom in Featured Fandoms below, or edit My Fandoms in Profile.'
+              : 'Browse Featured Fandoms below, or create an account to save your favourite fandoms.',
+        ),
+      ];
+    } else {
+      final picked = keys.toSet();
+      final posts = allPosts.where((p) => picked.contains(p.category)).take(8).toList();
+      subtitle = 'Based on your interests: ${_joinNames(names)}';
+      body = posts.isEmpty
+          ? [
+              _message(
+                Icons.auto_stories_outlined,
+                'Nothing here yet',
+                'There are no posts for ${_joinNames(names)} yet. Browse other fandoms in Featured Fandoms below.',
+              ),
+            ]
+          : [
+              SizedBox(
+                height: 300,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  clipBehavior: Clip.none,
+                  itemCount: posts.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 12),
+                  itemBuilder: (context, i) =>
+                      SizedBox(width: 270, child: LoreCard(post: posts[i])),
+                ),
+              ),
+            ];
+    }
+    return [
+      _sectionTitle('FOR YOU', subtitle),
+      const SizedBox(height: 12),
+      ...body,
+      const SizedBox(height: 16),
+    ];
+  }
+
+  /// "Gaming, Anime & Manga" — comma-separated (names may contain "&"),
+  /// capped at three: "A, B, C and 2 more".
+  static String _joinNames(List<String> names) {
+    if (names.length <= 3) return names.join(', ');
+    return '${names.take(3).join(', ')} and ${names.length - 3} more';
+  }
+
+  List<Widget> _trendingEventsSection() {
+    // Re-checked here so an event drops off once it ends (end time, or the
+    // end of its start day) even without a new snapshot.
+    final events = _trendingEvents.where((e) => e.isVisibleToFans()).toList();
+    if (events.isEmpty) return const [];
+    return [
+      _sectionTitle('TRENDING EVENTS', 'Upcoming conventions and meetups fans are talking about'),
+      const SizedBox(height: 12),
+      for (final e in events) EventCard(event: e),
+      const SizedBox(height: 16),
+    ];
+  }
 
   Widget _sectionTitle(String title, String subtitle) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,

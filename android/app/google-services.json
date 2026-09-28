@@ -12,7 +12,20 @@
           "package_name": "com.example.fandom_verse"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "65975142578-p0iebg0om7vumea6onranv68o20q1mcc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.fandom_verse",
+            "certificate_hash": "46f886ed96cdd10719a545420f9f712448dca1ca"
+          }
+        },
+        {
+          "client_id": "65975142578-o7ohpkom84vsjct3v5n04o74664um293.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBHNU9G8vGttR4Z1Ocn6coI7Wtm2MAo6rI"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "65975142578-o7ohpkom84vsjct3v5n04o74664um293.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

@@ -28,26 +28,112 @@ service cloud.firestore {
       // New documents created by the owner must have role == 'fan'.
       // Admins are only ever created manually via the Firebase console —
       // the app itself can never self-grant an admin role.
-      allow create: if isOwner(uid) && request.resource.data.role == 'fan';
+      // A new profile also starts at 0 XP, so nobody registers as Level 5.
+      allow create: if isOwner(uid) && request.resource.data.role == 'fan'
+        && request.resource.data.get('xp', 0) == 0;
 
-      // Owners can update any field EXCEPT role (prevents self-promotion).
-      // Admins can update any field including role (for granting/revoking admin).
+      // Owners can update any field EXCEPT role (prevents self-promotion)
+      // and rank. XP rule: an owner's own write may leave xp unchanged or
+      // RAISE it by 1–20 (the app awards 2–20 per action with
+      // FieldValue.increment), never lower it and never jump further.
+      // Admins can update any field, including role and any xp value.
       allow update: if isAdmin() ||
-                       (isOwner(uid) && request.resource.data.role == resource.data.role);
+                       (isOwner(uid)
+                        && request.resource.data.role == resource.data.role
+                        && request.resource.data.get('rank', null)
+                             == resource.data.get('rank', null)
+                        && request.resource.data.get('xp', 0) is int
+                        && (request.resource.data.get('xp', 0)
+                              == resource.data.get('xp', 0)
+                            || (request.resource.data.get('xp', 0)
+                                  - resource.data.get('xp', 0) >= 1
+                                && request.resource.data.get('xp', 0)
+                                  - resource.data.get('xp', 0) <= 20)));
 
       allow delete: if isAdmin();
     }
 
     // ── Content collections (read-public, write-admin) ────────────────────────
 
+    // Public read (same as categories) so guests can browse; only admins
+    // create, edit or soft-delete fandoms.
     match /fandoms/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
+      // Fan counters (follow/unfollow + automatic trending). A signed-in fan
+      // may change ONLY these five fields; everything else is admin-only:
+      //  - followerCount, viewCount: move by at most 1 per write, never < 0
+      //    (the app uses FieldValue.increment(±1) in its transactions).
+      //  - weekViewCount, weekFollowCount: move by at most 1, or reset to
+      //    0 or 1 when a new ISO week starts; never < 0.
+      //  - weekKey: a short string such as "2026-W40".
+      // A field that isn't in the write keeps its stored value, so each
+      // check compares against that value (missing counts as 0).
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['followerCount', 'viewCount', 'weekViewCount',
+                       'weekFollowCount', 'weekKey'])
+        && stepOf(request.resource.data, resource.data, 'followerCount')
+        && stepOf(request.resource.data, resource.data, 'viewCount')
+        && weekCounter(request.resource.data, resource.data, 'weekViewCount')
+        && weekCounter(request.resource.data, resource.data, 'weekFollowCount')
+        && request.resource.data.get('weekKey', '') is string
+        && request.resource.data.get('weekKey', '').size() <= 10;
+    }
+
+    // Counter moved by at most 1 (or not at all) and is a non-negative int.
+    function stepOf(after, before, field) {
+      return after.get(field, 0) is int
+        && after.get(field, 0) >= 0
+        && after.get(field, 0) - before.get(field, 0) <= 1
+        && before.get(field, 0) - after.get(field, 0) <= 1;
+    }
+
+    // Weekly counter: a step of at most 1, or a reset to 0 or 1.
+    function weekCounter(after, before, field) {
+      return after.get(field, 0) is int
+        && after.get(field, 0) >= 0
+        && (stepOf(after, before, field)
+            || after.get(field, 0) == 0
+            || after.get(field, 0) == 1);
     }
 
     match /events/{docId} {
       allow read: if true;
       allow write: if isAdmin();
+      // My Agenda "X interested": a signed-in fan may change ONLY
+      // interestedCount, by exactly +1 or -1 from the stored value (missing
+      // = 0), never below 0 — and only together with the matching change to
+      // their own savedEventIds in the same transaction: +1 when this event
+      // is being added to their list, -1 when it's being removed. So the
+      // count can't be pushed up by repeated writes, by a big jump, or
+      // without actually saving the event.
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['interestedCount'])
+        && request.resource.data.interestedCount is int
+        && request.resource.data.interestedCount >= 0
+        && (
+             (request.resource.data.interestedCount
+                  == resource.data.get('interestedCount', 0) + 1
+               && docId in savedEventsAfter()
+               && !(docId in savedEventsBefore()))
+             || (request.resource.data.interestedCount
+                  == resource.data.get('interestedCount', 0) - 1
+               && !(docId in savedEventsAfter())
+               && docId in savedEventsBefore())
+           );
+    }
+
+    // The caller's saved-event list before and after the current write.
+    function savedEventsBefore() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid))
+        .data.get('savedEventIds', []);
+    }
+
+    function savedEventsAfter() {
+      return getAfter(/databases/$(database)/documents/users/$(request.auth.uid))
+        .data.get('savedEventIds', []);
     }
 
     match /glossary/{docId} {
@@ -60,13 +146,18 @@ service cloud.firestore {
     match /posts/{docId} {
       allow read: if true;
       allow write: if isAdmin();
-      // Trending Today: any signed-in user may count one view. Only the two
-      // view fields may change, and only as +1 on the same day or a reset to
-      // 1 with a new date — so nobody can inflate a count by a large jump or
-      // edit the post itself.
+      // View counting (Trending Today + all-time views, one transaction):
+      // any signed-in user may count one view. Only the three view fields
+      // may change; viewCount must go up by exactly 1 from the stored value
+      // (missing = 0), and todayViewCount must be +1 on the same day or a
+      // reset to 1 with a new date — so nobody can inflate a count with a
+      // large jump or edit anything else on the post.
       allow update: if isSignedIn()
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['todayViewCount', 'todayViewDate'])
+             .hasOnly(['viewCount', 'todayViewCount', 'todayViewDate'])
+        && request.resource.data.viewCount is int
+        && request.resource.data.viewCount
+             == resource.data.get('viewCount', 0) + 1
         && request.resource.data.todayViewDate is string
         && request.resource.data.todayViewDate.size() == 10
         && request.resource.data.todayViewCount is int
@@ -79,12 +170,28 @@ service cloud.firestore {
            );
     }
 
+    // Resources: creators and tags are public (guest browsing), admin-write.
+    match /creators/{docId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /tags/{docId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
     match /merchandise/{docId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
     match /categories/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /avatarLibrary/{docId} {
       allow read: if true;
       allow write: if isAdmin();
     }
@@ -130,6 +237,28 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status in ['Placed', 'Processing', 'Completed'];
       allow delete: if false;
+    }
+
+    // ── Contact Us inquiries ──────────────────────────────────────────────────
+    // Anyone (guests too) may send one, with exactly these fields and sane
+    // lengths; a signed-in sender can only attach their own uid. Only admins
+    // can read or manage them.
+    match /inquiries/{docId} {
+      allow create: if request.resource.data.keys().hasOnly(
+             ['name', 'email', 'subject', 'message', 'uid', 'status', 'createdAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 60
+        && request.resource.data.email is string
+        && request.resource.data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() >= 3 && request.resource.data.subject.size() <= 100
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 10 && request.resource.data.message.size() <= 1000
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt == request.time
+        && (request.resource.data.uid == null
+            || (isSignedIn() && request.resource.data.uid == request.auth.uid));
+      allow read, update, delete: if isAdmin();
     }
 
     // ── Catch-all ─────────────────────────────────────────────────────────────

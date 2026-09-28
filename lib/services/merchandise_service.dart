@@ -19,6 +19,17 @@ class MerchandiseService {
           .map((s) =>
               s.docs.map((d) => Merchandise.fromMap(d.data(), d.id)).toList());
 
+  Stream<List<Merchandise>> watchMerchandiseByFandom(String fandomId) =>
+      FirestoreDb.instance
+          .collection('merchandise')
+          .where('fandomId', isEqualTo: fandomId)
+          .snapshots()
+          .map((s) => s.docs
+              .map((d) => Merchandise.fromMap(d.data(), d.id))
+              .toList()
+            ..sort((a, b) =>
+                a.name.toLowerCase().compareTo(b.name.toLowerCase())));
+
   Future<void> addMerchandise(Merchandise item) =>
       FirestoreDb.instance.collection('merchandise').add(item.toMap());
 

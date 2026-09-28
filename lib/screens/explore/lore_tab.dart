@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../logic/resource_query.dart';
 import '../../models/post.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
@@ -9,6 +10,7 @@ import 'deep_dive_screen.dart';
 import 'fandom_detail_screen.dart';
 import 'glossary_screen.dart';
 import 'post_list_screen.dart';
+import '../resources/resources_screen.dart';
 
 /// Lore tab: Today's Fandom highlight, "where to start" entry tiles
 /// (Beginner Hub, Deep Dive, Glossary, Latest) and content-type shortcuts.
@@ -232,10 +234,8 @@ class _LoreTabState extends State<LoreTab> {
           borderRadius: BorderRadius.circular(14),
           child: InkWell(
             borderRadius: BorderRadius.circular(14),
-            onTap: () => _push(PostListScreen(
-              title: t.label,
-              stream: PostService.instance.watchPostsByContentType(t.label),
-              emptyMessage: 'No ${t.label} posts yet.',
+            onTap: () => _push(ResourcesScreen(
+              initialFilter: ResourceFilter(types: {t.label}),
             )),
             child: Container(
               height: 56,

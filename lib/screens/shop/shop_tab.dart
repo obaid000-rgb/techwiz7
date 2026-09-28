@@ -337,6 +337,9 @@ Future<void> toggleWishlist(BuildContext context, Merchandise item) async {
 void showGuestLoginSheet(BuildContext context, {required String feature}) {
   showModalBottomSheet(
     context: context,
+    // Size to the content (both buttons) instead of the default ~half-screen
+    // cap, which cut off CREATE ACCOUNT on shorter phones.
+    isScrollControlled: true,
     backgroundColor: AppTheme.card,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -409,7 +412,11 @@ class _GuestLoginSheetState extends State<_GuestLoginSheet> {
 
   @override
   Widget build(BuildContext context) =>
-      SafeArea(child: GuestPrompt(feature: widget.feature));
+      SafeArea(
+        child: SingleChildScrollView(
+          child: GuestPrompt(feature: widget.feature),
+        ),
+      );
 }
 
 /// Product card used by the Shop grid and the Wishlist screen.

@@ -47,18 +47,20 @@ class UserService {
     });
   }
 
-  /// Edit Profile save: writes only the given basics (name / bio / avatarUrl)
+  /// Edit Profile save: writes only the given basics (name / bio / avatar)
   /// as one partial update — every other field on the user doc is untouched.
   Future<void> updateProfileBasics(
     String uid, {
     String? name,
     String? bio,
     String? avatarUrl,
+    String? avatarPresetId,
   }) {
     final changes = <String, dynamic>{
       'name': ?name,
       'bio': ?bio,
       'avatarUrl': ?avatarUrl,
+      'avatarPresetId': ?avatarPresetId,
     };
     if (changes.isEmpty) return Future.value();
     return FirestoreDb.instance.collection('users').doc(uid).update(changes);

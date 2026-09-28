@@ -306,3 +306,32 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
     );
   }
 }
+
+Future<String?> pickAndUploadImage(BuildContext context, {Color accentColor = AppTheme.accent}) async {
+  final source = await showModalBottomSheet<ImageSource>(
+    context: context,
+    backgroundColor: AppTheme.card,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (ctx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: Icon(Icons.photo_library_outlined, color: accentColor),
+            title: Text('Choose from Gallery', style: AppTheme.inter(size: 14)),
+            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+          ),
+          ListTile(
+            leading: Icon(Icons.camera_alt_outlined, color: accentColor),
+            title: Text('Take a Photo', style: AppTheme.inter(size: 14)),
+            onTap: () => Navigator.pop(ctx, ImageSource.camera),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (source == null) return null;
+  final file = await ImagePicker().pickImage(source: source, imageQuality: 85, maxWidth: 1280);
+  if (file == null) return null;
+  return CloudinaryService.instance.uploadImage(file);
+}

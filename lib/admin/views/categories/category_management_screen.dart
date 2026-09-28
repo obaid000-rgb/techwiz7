@@ -228,6 +228,14 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                               color: AppTheme.cyan, size: 13),
                         ),
                       ],
+                      if (cat.showInOnboarding) ...[
+                        const SizedBox(width: 6),
+                        const Tooltip(
+                          message: 'Shown in onboarding',
+                          child: Icon(Icons.waving_hand_outlined,
+                              color: AppTheme.accent, size: 13),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -354,10 +362,36 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
   Future<void> _confirmDelete(
       BuildContext context, AppCategory cat) async {
     final usage = await CategoryService.instance.checkUsage(cat.key);
-    final total = (usage['posts'] ?? 0) +
-        (usage['merchandise'] ?? 0) +
-        (usage['fandoms'] ?? 0);
+    final fandomCount = usage['fandoms'] ?? 0;
+    final total = (usage['posts'] ?? 0) + (usage['merchandise'] ?? 0);
     if (!context.mounted) return;
+
+    if (fandomCount > 0) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppTheme.card,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Can\'t delete "${cat.name}"',
+              style: AppTheme.orbitron(size: 12, color: Colors.white)),
+          content: Text(
+              '$fandomCount active fandom${fandomCount == 1 ? '' : 's'} '
+              '${fandomCount == 1 ? 'still uses' : 'still use'} this category.\n\n'
+              'Move ${fandomCount == 1 ? 'it' : 'them'} to another category or '
+              'deactivate ${fandomCount == 1 ? 'it' : 'them'} in Fandoms first.',
+              style: AppTheme.inter(size: 12, color: Colors.grey)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('OK',
+                  style: AppTheme.orbitron(size: 9, color: AppTheme.orange)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -371,8 +405,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
             ? Text(
                 'Still referenced by:\n'
                 '  • ${usage['posts']} post(s)\n'
-                '  • ${usage['merchandise']} merchandise item(s)\n'
-                '  • ${usage['fandoms']} fandom(s)\n\n'
+                '  • ${usage['merchandise']} merchandise item(s)\n\n'
                 'Deleting orphans those references. Continue?',
                 style: AppTheme.inter(size: 12, color: Colors.grey))
             : Text('Remove this category? This cannot be undone.',

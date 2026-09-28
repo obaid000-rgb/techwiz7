@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/post.dart';
 import 'firestore_db.dart';
 
@@ -17,18 +18,17 @@ class PostService {
       watchPosts().map((posts) => posts.where((p) => p.isActive).toList());
 
   Stream<List<Post>> watchPostsByContentType(String contentType) =>
-      watchActivePosts()
-          .map((posts) => posts.where((p) => p.contentType == contentType).toList());
+      watchActivePosts().map(
+        (posts) => posts.where((p) => p.contentType == contentType).toList(),
+      );
 
   /// Returns the currently flagged "Today's Fandom" post, or null if none.
-  Stream<Post?> watchFandomOfTheDay() => watchActivePosts().map(
-        (posts) {
-          for (final p in posts) {
-            if (p.isFandomOfTheDay) return p;
-          }
-          return null;
-        },
-      );
+  Stream<Post?> watchFandomOfTheDay() => watchActivePosts().map((posts) {
+    for (final p in posts) {
+      if (p.isFandomOfTheDay) return p;
+    }
+    return null;
+  });
 
   /// Today's date as stored in `todayViewDate` ("yyyy-MM-dd", device-local).
   static String todayKey([DateTime? now]) {
@@ -61,24 +61,45 @@ class PostService {
   /// - At a day rollover two fans can both read "yesterday" and both try to
   ///   reset to 1; the rule rejects the second reset (the date already
   ///   matches), so we retry: the retry reads today's date and increments.
+  ///
+  /// Merged view counting (Resources R1): the SAME transaction also adds 1
+  /// to the all-time viewCount — one write per view, never a second one.
+  /// Both counters move together, and FieldValue.increment(1) makes the
+  /// all-time +1 exact under contention, which the posts rule requires.
+  /// A post is counted at most once per app session: [_viewedThisSession]
+  /// remembers it (in memory only), so reopening a post doesn't recount,
+  /// for Trending Today or for viewCount. A failed write forgets the post
+  /// again so a later open can still count it.
+  static final Set<String> _viewedThisSession = {};
+
+  @visibleForTesting
+  static void resetSessionViews() => _viewedThisSession.clear();
+
   Future<void> recordView(String postId) async {
+    if (!_viewedThisSession.add(postId)) return;
     final ref = FirestoreDb.instance.collection('posts').doc(postId);
     final today = todayKey();
-    for (var attempt = 1;; attempt++) {
-      try {
-        await FirestoreDb.instance.runTransaction((tx) async {
-          final snap = await tx.get(ref);
-          if (!snap.exists) return;
-          final sameDay = snap.data()!['todayViewDate'] == today;
-          tx.update(ref, {
-            'todayViewCount': sameDay ? FieldValue.increment(1) : 1,
-            'todayViewDate': today,
+    try {
+      for (var attempt = 1; ; attempt++) {
+        try {
+          await FirestoreDb.instance.runTransaction((tx) async {
+            final snap = await tx.get(ref);
+            if (!snap.exists) return;
+            final sameDay = snap.data()!['todayViewDate'] == today;
+            tx.update(ref, {
+              'todayViewCount': sameDay ? FieldValue.increment(1) : 1,
+              'todayViewDate': today,
+              'viewCount': FieldValue.increment(1),
+            });
           });
-        });
-        return;
-      } on FirebaseException catch (e) {
-        if (e.code != 'permission-denied' || attempt >= 3) rethrow;
+          return;
+        } on FirebaseException catch (e) {
+          if (e.code != 'permission-denied' || attempt >= 3) rethrow;
+        }
       }
+    } catch (_) {
+      _viewedThisSession.remove(postId);
+      rethrow;
     }
   }
 
@@ -90,10 +111,55 @@ class PostService {
       .snapshots()
       .map((s) => s.docs.map((d) => Post.fromMap(d.data(), d.id)).toList());
 
+  Stream<List<Post>> watchPostsInFandoms(List<String> fandomIds) =>
+      FirestoreDb.instance
+          .collection('posts')
+          .where('fandomId', whereIn: fandomIds)
+          .snapshots()
+          .map((s) => s.docs.map((d) => Post.fromMap(d.data(), d.id)).toList());
+
+  Stream<List<Post>> watchPostsByFandom(String fandomId) => FirestoreDb.instance
+      .collection('posts')
+      .where('fandomId', isEqualTo: fandomId)
+      .snapshots()
+      .map(
+        (s) =>
+            s.docs.map((d) => Post.fromMap(d.data(), d.id)).toList()
+              ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
+      );
+
+  /// Creates or updates [post] and, in the same batch, creates a
+  /// tags/{slug} document for each entry of [newTags] (slug → display name)
+  /// that doesn't exist yet. Returns the post's document id.
+  Future<String> savePostWithTags(Post post, Map<String, String> newTags,
+      {required bool isNew}) async {
+    final db = FirestoreDb.instance;
+    final posts = db.collection('posts');
+    final ref = isNew ? posts.doc() : posts.doc(post.id);
+    final batch = db.batch();
+    final data = post.toMap();
+    if (isNew) {
+      batch.set(ref, data);
+    } else {
+      if (!post.hasVideo) data['youtubeUrl'] = FieldValue.delete();
+      batch.update(ref, data);
+    }
+    newTags.forEach((slug, name) {
+      batch.set(db.collection('tags').doc(slug), {
+        'name': name,
+        'isPinned': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    });
+    await batch.commit();
+    return ref.id;
+  }
+
   /// Adds a post and returns its new document id.
   Future<String> addPost(Post post) async {
-    final ref =
-        await FirestoreDb.instance.collection('posts').add(post.toMap());
+    final ref = await FirestoreDb.instance
+        .collection('posts')
+        .add(post.toMap());
     return ref.id;
   }
 
@@ -122,10 +188,9 @@ class PostService {
       if (doc.id == postId) continue;
       batch.update(doc.reference, {'isFandomOfTheDay': false});
     }
-    batch.update(
-      FirestoreDb.instance.collection('posts').doc(postId),
-      {'isFandomOfTheDay': true},
-    );
+    batch.update(FirestoreDb.instance.collection('posts').doc(postId), {
+      'isFandomOfTheDay': true,
+    });
     await batch.commit();
   }
 

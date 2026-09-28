@@ -18,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passController = TextEditingController();
   bool _loading = false;
+  bool _submitted = false;
   String? _errorMessage;
 
   @override
@@ -28,7 +29,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _submitted = true);
+      return;
+    }
     setState(() { _loading = true; _errorMessage = null; });
     try {
       await AuthService.instance.signIn(
@@ -46,15 +50,16 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _loginWithGoogle() async {
     setState(() { _loading = true; _errorMessage = null; });
     try {
-      await AuthService.instance.signInWithGoogle();
-      if (mounted) Navigator.pop(context);
+      final signedIn = await AuthService.instance.signInWithGoogle();
+      // Closing the Google account picker is not a login: stay here.
+      if (signedIn && mounted) Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
       debugPrint("Firebase Auth Google Exception: Code: ${e.code}, Message: ${e.message}");
       setState(() { _errorMessage = _friendlyError(e.code); });
     } catch (e, stack) {
       debugPrint("Detailed Google Sign-In Failure Object: $e");
       debugPrint("Stacktrace: $stack");
-      setState(() { _errorMessage = 'Google Login error details: ${e.toString().split('\n').first}'; });
+      setState(() { _errorMessage = _googleError(e); });
     } finally {
       if (mounted) setState(() { _loading = false; });
     }
@@ -74,9 +79,28 @@ class _LoginScreenState extends State<LoginScreen> {
         return 'Too many attempts. Please try again later.';
       case 'network-request-failed':
         return 'No internet connection. Check your connection and try again.';
+      case 'account-exists-with-different-credential':
+        return 'This email already has an account. Log in with your email and password.';
       default:
         return 'Login failed. Please try again.';
     }
+  }
+
+  /// google_sign_in reports failures as PlatformException text containing
+  /// Google Play Services' ApiException status code.
+  String _googleError(Object e) {
+    final s = e.toString();
+    if (s.contains('network_error') || s.contains('ApiException: 7')) {
+      return 'No internet connection. Check your connection and try again.';
+    }
+    if (s.contains('ApiException: 10')) {
+      // DEVELOPER_ERROR: this build's SHA-1 isn't registered in Firebase.
+      return 'Google sign-in isn\'t set up for this build yet. Please log in with email for now.';
+    }
+    if (s.contains('sign_in_canceled') || s.contains('ApiException: 12501')) {
+      return 'Google sign-in was cancelled.';
+    }
+    return 'Google sign-in failed. Please try again or log in with email.';
   }
 
   @override
@@ -99,6 +123,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 padding: const EdgeInsets.all(24.0),
                 child: Form(
                   key: _formKey,
+                  autovalidateMode: _submitted
+                      ? AutovalidateMode.always
+                      : AutovalidateMode.disabled,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -187,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextFormField(
                         controller: _passController,
                         obscureText: true,
-                        validator: Validators.validatePassword,
+                        validator: Validators.validateLoginPassword,
                         style: const TextStyle(color: Colors.white),
                         decoration: const InputDecoration(
                           prefixIcon:
@@ -283,7 +310,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               style:
                                   TextStyle(color: Colors.grey, fontSize: 13)),
                           GestureDetector(
-                            onTap: () => Navigator.push(
+                            // Replace (not push) so Login and Register swap
+                            // in place; after registering, Register's pop
+                            // returns to where the user started.
+                            onTap: () => Navigator.pushReplacement(
                               context,
                               MaterialPageRoute(
                                   builder: (_) => const SignupScreen()),

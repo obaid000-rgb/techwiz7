@@ -29,10 +29,24 @@ class CategoryService {
       .doc(cat.key)
       .set(cat.toMap());
 
-  Future<void> updateCategory(AppCategory cat) => FirestoreDb.instance
-      .collection('categories')
-      .doc(cat.id)
-      .update(cat.toMap());
+  Future<void> updateCategory(AppCategory cat) async {
+    final db = FirestoreDb.instance;
+    final batch = db.batch();
+    batch.update(db.collection('categories').doc(cat.id), cat.toMap());
+    // Category rename: copy the new name into the denormalized categoryName
+    // of every fandom in this category, committed in the same batch as the
+    // category itself so the two can never disagree.
+    final fandoms = await db
+        .collection('fandoms')
+        .where('categoryId', isEqualTo: cat.key)
+        .get();
+    for (final d in fandoms.docs) {
+      if (d.data()['categoryName'] != cat.name) {
+        batch.update(d.reference, {'categoryName': cat.name});
+      }
+    }
+    await batch.commit();
+  }
 
   Future<void> deleteCategory(String id) =>
       FirestoreDb.instance.collection('categories').doc(id).delete();
@@ -87,8 +101,8 @@ class CategoryService {
           .get(),
       FirestoreDb.instance
           .collection('fandoms')
-          .where('category', isEqualTo: key)
-          .limit(1)
+          .where('categoryId', isEqualTo: key)
+          .where('isActive', isEqualTo: true)
           .get(),
     ]);
     return {

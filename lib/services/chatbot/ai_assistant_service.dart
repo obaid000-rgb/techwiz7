@@ -9,18 +9,19 @@ enum AiAssistantFailure { offline, rateLimited, badKey, unavailable }
 
 class AiAssistantException implements Exception {
   final AiAssistantFailure kind;
+  
   const AiAssistantException(this.kind);
 
   String get message => switch (kind) {
-        AiAssistantFailure.offline =>
-          "Couldn't reach the assistant, check your connection and try again.",
-        AiAssistantFailure.rateLimited =>
-          'The assistant is busy right now. Please wait a moment and try again.',
-        AiAssistantFailure.badKey =>
-          'The assistant is not available right now (configuration problem).',
-        AiAssistantFailure.unavailable =>
-          "Couldn't reach the assistant, check your connection and try again.",
-      };
+    AiAssistantFailure.offline =>
+      "Couldn't reach the assistant, check your connection and try again.",
+    AiAssistantFailure.rateLimited =>
+      'The assistant is busy right now. Please wait a moment and try again.',
+    AiAssistantFailure.badKey =>
+      'The assistant is not available right now (configuration problem).',
+    AiAssistantFailure.unavailable =>
+      "Couldn't reach the assistant, check your connection and try again.",
+  };
 }
 
 /// Gemini-backed help assistant, scoped to questions about Fandom Verse.
@@ -61,21 +62,31 @@ class AiAssistantService {
   /// Sends [text] and returns the reply. Throws [AiAssistantException].
   Future<String> ask(String text) async {
     if (GeminiConfig.apiKey.isEmpty) {
-      if (kDebugMode) debugPrint('[AiAssistant] no key: run with --dart-define-from-file=secrets.json');
+      if (kDebugMode) {
+        debugPrint(
+          '[AiAssistant] no key: run with --dart-define-from-file=secrets.json',
+        );
+      }
       throw const AiAssistantException(AiAssistantFailure.badKey);
     }
     _chat ??= _model.startChat();
     transcript.add((fromUser: true, text: text));
     try {
-      final response = await _chat!.sendMessage(Content.text(text)).timeout(_timeout);
+      final response = await _chat!
+          .sendMessage(Content.text(text))
+          .timeout(_timeout);
       final reply = response.text?.trim();
-      if (reply == null || reply.isEmpty) throw const AiAssistantException(AiAssistantFailure.unavailable);
+      if (reply == null || reply.isEmpty) {
+        throw const AiAssistantException(AiAssistantFailure.unavailable);
+      }
       transcript.add((fromUser: false, text: reply));
       return reply;
     } catch (e) {
       transcript.removeLast(); // the failed question isn't part of the chat
       final failure = _classify(e);
+
       if (kDebugMode) debugPrint('[AiAssistant] ${failure.name}: $e');
+      
       throw AiAssistantException(failure);
     }
   }
@@ -89,15 +100,22 @@ class AiAssistantService {
     final s = e.toString().toLowerCase();
     // Network first: these messages include the request URL, which itself
     // contains words like "generateContent".
-    if (s.contains('socketexception') || s.contains('failed host lookup') ||
-        s.contains('clientexception') || s.contains('connection') || s.contains('network')) {
+    if (s.contains('socketexception') ||
+        s.contains('failed host lookup') ||
+        s.contains('clientexception') ||
+        s.contains('connection') ||
+        s.contains('network')) {
       return AiAssistantFailure.offline;
     }
-    if (s.contains('resource_exhausted') || s.contains('quota') || s.contains('rate limit') ||
+    if (s.contains('resource_exhausted') ||
+        s.contains('quota') ||
+        s.contains('rate limit') ||
         s.contains('too many requests')) {
       return AiAssistantFailure.rateLimited;
     }
-    if (s.contains('api key') || s.contains('api_key')) return AiAssistantFailure.badKey;
+    if (s.contains('api key') || s.contains('api_key')) {
+      return AiAssistantFailure.badKey;
+    }
     return AiAssistantFailure.unavailable;
   }
 }

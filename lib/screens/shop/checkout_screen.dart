@@ -3,6 +3,7 @@ import '../../models/cart_item.dart';
 import '../../services/auth_service.dart';
 import '../../services/order_service.dart';
 import '../../theme/app_theme.dart';
+import '../../services/xp_service.dart';
 import 'order_receipt_screen.dart';
 
 /// Simulated checkout: a read-only bill summary and "Place Order". There is
@@ -28,6 +29,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     try {
       final orderId =
           await OrderService.instance.placeOrder(user.uid, widget.items);
+      XpService.instance.award(XpAction.order);
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(

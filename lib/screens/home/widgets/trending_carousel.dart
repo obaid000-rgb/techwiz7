@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../../models/app_category.dart';
-import '../../explore/category_detail_screen.dart';
-import '../../../services/category_service.dart';
+import '../../../models/fandom.dart';
+import '../../fandoms/fandom_page_screen.dart';
+import '../../../services/fandom_service.dart';
+import '../../../utils/fandom_stats.dart';
 import '../../../theme/app_theme.dart';
-import 'fandom_heart_button.dart';
 
 class TrendingCarousel extends StatefulWidget {
   const TrendingCarousel({super.key});
@@ -14,12 +14,12 @@ class TrendingCarousel extends StatefulWidget {
 
 class _TrendingCarouselState extends State<TrendingCarousel> {
   final PageController _pageController = PageController();
-  // Cached once — calling watchActiveCategories() fresh inside build() would
+  // Cached once — calling watchTrending() fresh inside build() would
   // hand StreamBuilder a brand-new stream on every setState() (e.g. from
   // onPageChanged), forcing it through ConnectionState.waiting and remounting
   // the PageView mid-navigation, which snapped the page back to 0.
-  late final Stream<List<AppCategory>> _categoriesStream =
-      CategoryService.instance.watchActiveCategories();
+  late final Stream<List<Fandom>> _fandomsStream =
+      FandomService.instance.watchTrending();
   int _currentIndex = 0;
 
   @override
@@ -39,8 +39,8 @@ class _TrendingCarouselState extends State<TrendingCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<AppCategory>>(
-      stream: _categoriesStream,
+    return StreamBuilder<List<Fandom>>(
+      stream: _fandomsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
@@ -59,7 +59,7 @@ class _TrendingCarouselState extends State<TrendingCarousel> {
                 children: [
                   const Icon(Icons.wifi_off, color: Colors.grey, size: 28),
                   const SizedBox(height: 8),
-                  Text('Could not load categories',
+                  Text('Could not load trending fandoms',
                       style: AppTheme.inter(size: 12, color: Colors.grey)),
                 ],
               ),
@@ -67,10 +67,7 @@ class _TrendingCarouselState extends State<TrendingCarousel> {
           );
         }
 
-        final cats = (snapshot.data ?? [])
-            .where((c) => c.isFeaturedInCarousel)
-            .toList()
-          ..sort((a, b) => a.order.compareTo(b.order));
+        final cats = snapshot.data ?? [];
 
         if (cats.isEmpty) {
           return SizedBox(
@@ -81,7 +78,7 @@ class _TrendingCarouselState extends State<TrendingCarousel> {
                 children: [
                   const Icon(Icons.category_outlined, color: Colors.grey, size: 28),
                   const SizedBox(height: 8),
-                  Text('No categories featured yet',
+                  Text('No trending fandoms yet',
                       style: AppTheme.inter(size: 12, color: Colors.grey)),
                 ],
               ),
@@ -99,7 +96,7 @@ class _TrendingCarouselState extends State<TrendingCarousel> {
                     controller: _pageController,
                     onPageChanged: (idx) => setState(() => _currentIndex = idx),
                     itemCount: cats.length,
-                    itemBuilder: (context, index) => _SlideCard(cat: cats[index]),
+                    itemBuilder: (context, index) => _SlideCard(fandom: cats[index]),
                   ),
                   _NavArrow(
                     alignment: Alignment.centerLeft,
@@ -139,16 +136,18 @@ class _TrendingCarouselState extends State<TrendingCarousel> {
 }
 
 class _SlideCard extends StatelessWidget {
-  const _SlideCard({required this.cat});
+  const _SlideCard({required this.fandom});
 
-  final AppCategory cat;
+  final Fandom fandom;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => CategoryDetailScreen(category: cat)),
+        MaterialPageRoute(
+            builder: (_) =>
+                FandomPageScreen(fandomId: fandom.id, initial: fandom)),
       ),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -161,9 +160,9 @@ class _SlideCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (cat.imageUrl != null && cat.imageUrl!.isNotEmpty)
+            if (fandom.coverImageUrl.isNotEmpty)
               Image.network(
-                cat.imageUrl!,
+                fandom.coverImageUrl,
                 fit: BoxFit.cover,
                 loadingBuilder: (context, child, progress) {
                   if (progress == null) return child;
@@ -209,28 +208,58 @@ class _SlideCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    cat.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                  Row(
+                    children: [
+                      FandomLogo(fandom: fandom, size: 40),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              fandom.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            if (fandom.categoryName.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.cyan,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  fandom.categoryName.toUpperCase(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 4),
+                            Text(
+                              followersLabel(fandom.followerCount),
+                              style: const TextStyle(
+                                  color: Colors.white70, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  if (cat.description.isNotEmpty)
-                    Text(
-                      cat.description,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
                 ],
               ),
-            ),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: FandomHeartButton(categoryKey: cat.key, categoryName: cat.name),
             ),
           ],
         ),

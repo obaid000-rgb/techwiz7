@@ -5,22 +5,24 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:table_calendar/table_calendar.dart';
+import '../../logic/event_query.dart';
 import '../../models/event_item.dart';
+import '../../models/event_type.dart';
+import '../../services/auth_service.dart';
 import '../../services/event_service.dart';
 import '../../services/location_service.dart';
 import '../../theme/app_theme.dart';
 import 'event_detail_screen.dart';
-
-class _EventWithDistance {
-  final EventItem event;
-  final double? distanceKm;
-  const _EventWithDistance(this.event, this.distanceKm);
-}
+import 'my_agenda_screen.dart';
+import '../shop/shop_tab.dart' show showGuestLoginSheet;
+import 'widgets/event_card.dart';
+import 'widgets/event_filter_bar.dart';
 
 enum _EventView { list, map, calendar }
 
 /// Events tab — Fandom Conventions list (default) with map and calendar views.
-/// Only upcoming events are shown; an optional city filter narrows every view.
+/// Only events that haven't ended are shown; the toolbar filters (search,
+/// type, date, distance, city, My fandoms) narrow all three views alike.
 class ExploreTab extends StatefulWidget {
   const ExploreTab({super.key});
 
@@ -35,9 +37,11 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
   ];
 
   _EventView _view = _EventView.list;
-  String? _cityFilter; // null = default GPS "nearby" view
+  EventFilter _filter = EventFilter.none;
+  final TextEditingController _searchCtr = TextEditingController();
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
+  DateTime _calendarToday = DateTime.now(); // the day the calendar was last reset to
   Position? _fanPosition;
   LocationStatus? _locStatus; // null until the first silent check finishes
   bool _locating = false;
@@ -77,6 +81,7 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
   @override
   void dispose() {
     _eventsSub?.cancel();
+    _searchCtr.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -85,6 +90,17 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
   /// or the app permission takes effect without another tap.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The Events tab lives for the whole app session, so the calendar's
+    // "today" was fixed at launch; after midnight it opened on yesterday.
+    // Move the calendar to the real today when the app comes back on a new day.
+    if (state == AppLifecycleState.resumed && !isSameDay(_calendarToday, DateTime.now())) {
+      final now = DateTime.now();
+      setState(() {
+        _calendarToday = now;
+        _focusedDay = now;
+        _selectedDay = now;
+      });
+    }
     if (state == AppLifecycleState.resumed &&
         !_locating &&
         (_locStatus == LocationStatus.deniedForever ||
@@ -193,107 +209,165 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
     );
   }
 
-  List<_EventWithDistance> _sortByDistance(List<EventItem> events) {
-    // Events with coordinates get a real distance from the Fan's position
-    // and sort nearest-first. Events without coordinates (pre-migration)
-    // — or when the Fan's position isn't available — fall back to the
-    // original date-ordered list with no distance shown, never a fake one.
-    final fanPos = _fanPosition;
-    if (fanPos == null) {
-      return events.map((e) => _EventWithDistance(e, null)).toList();
-    }
-    final withDistance = <_EventWithDistance>[];
-    final withoutDistance = <_EventWithDistance>[];
-    for (final e in events) {
-      if (e.hasCoordinates) {
-        final meters = Geolocator.distanceBetween(
-            fanPos.latitude, fanPos.longitude, e.latitude!, e.longitude!);
-        withDistance.add(_EventWithDistance(e, meters / 1000));
-      } else {
-        withoutDistance.add(_EventWithDistance(e, null));
-      }
-    }
-    withDistance.sort((a, b) => a.distanceKm!.compareTo(b.distanceKm!));
-    return [...withDistance, ...withoutDistance];
+  GeoPoint? get _userLocation {
+    final p = _fanPosition;
+    return p == null ? null : (lat: p.latitude, lng: p.longitude);
   }
+
+  void _clearAll() {
+    _searchCtr.clear();
+    setState(() => _filter = EventFilter.none);
+  }
+
+  /// Buttons beside the tab title.
+  List<Widget> headerActions(BuildContext context) => [
+        IconButton(
+          tooltip: 'My Agenda',
+          icon: const Icon(Icons.event_note_rounded, color: AppTheme.pink),
+          onPressed: () {
+            if (AuthService.instance.currentUser == null) {
+              showGuestLoginSheet(context, feature: 'My Agenda');
+              return;
+            }
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const MyAgendaScreen()));
+          },
+        ),
+      ];
+
+  /// Top of the tab: title plus the "My Agenda" entry point.
+  Widget _header() => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Events', style: AppTheme.orbitron(size: 22, weight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text('Fan conventions and meetups.',
+                  style: AppTheme.inter(size: 14, color: AppTheme.textSecondary)),
+            ]),
+          ),
+          ...headerActions(context),
+        ],
+      );
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-      children: [
-        Text('Events', style: AppTheme.orbitron(size: 22, weight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        Text('Fan conventions and meetups.',
-            style: AppTheme.inter(size: 14, color: AppTheme.textSecondary)),
-        const SizedBox(height: 20),
-        _viewToggle(),
-        const SizedBox(height: 16),
-        if (_locStatus != null && _fanPosition == null && _cityFilter == null) _locationBanner(),
-        if (_fanPosition != null && _cityFilter == null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Row(children: [
-              const Icon(Icons.near_me, color: AppTheme.pink, size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                    _city != null
-                        ? 'Near $_city · sorted by distance'
-                        : _cityLookupFailed
-                            ? 'Couldn\'t determine your city, showing all events by distance'
-                            : 'Sorted by distance from you',
-                    style: AppTheme.inter(size: 13, color: AppTheme.textSecondary)),
-              ),
-            ]),
-          ),
-        Builder(
-          builder: (context) {
-            if (_eventsError != null && _eventsData == null) {
-              return _message(Icons.wifi_off, 'Could not load events',
-                  'Check your connection and try again.');
-            }
-            if (_eventsData == null) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.pink)),
+    return ValueListenableBuilder<UserData?>(
+      valueListenable: AuthService.instance.userNotifier,
+      builder: (context, user, _) => ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+        children: [
+          _header(),
+          const SizedBox(height: 20),
+          _viewToggle(),
+          const SizedBox(height: 16),
+          if (_locStatus != null && _fanPosition == null) _locationBanner(),
+          if (_fanPosition != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Row(children: [
+                const Icon(Icons.near_me, color: AppTheme.pink, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                      _city != null
+                          ? 'Near $_city · sorted by distance'
+                          : _cityLookupFailed
+                              ? 'Couldn\'t determine your city, showing all events by distance'
+                              : 'Sorted by distance from you',
+                      style: AppTheme.inter(size: 13, color: AppTheme.textSecondary)),
+                ),
+              ]),
+            ),
+          Builder(
+            builder: (context) {
+              if (_eventsError != null && _eventsData == null) {
+                return _message(Icons.wifi_off, 'Could not load events',
+                    'Check your connection and try again.');
+              }
+              if (_eventsData == null) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 32),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.pink)),
+                );
+              }
+              // Re-check here too, so an app left open drops an event once it
+              // ends (its end time, or the end of its start day) without
+              // waiting for a new snapshot. A multi-day convention stays until
+              // its last day is over.
+              final now = DateTime.now();
+              final visible = _eventsData!.where((e) => e.isVisibleToFans(now)).toList();
+              if (visible.isEmpty) {
+                return _message(Icons.event_outlined, 'No upcoming events',
+                    'Check back soon for upcoming conventions.');
+              }
+              final cities = availableCities(visible, now);
+              final location = _userLocation;
+              // The filter that actually applies: a chosen city that no longer
+              // has events is dropped, radius needs a location, and "My
+              // fandoms" needs an account.
+              final effective = _filter.copyWith(
+                cities: {
+                  for (final c in _filter.cities)
+                    if (cities.any((x) => x.toLowerCase() == c.toLowerCase())) c,
+                },
+                clearRadius: location == null,
+                myFandomsOnly: user != null && _filter.myFandomsOnly,
               );
-            }
-            // Re-check by day here too, so an app left open past midnight
-            // drops yesterday's events without waiting for a new snapshot.
-            final upcoming = _eventsData!.where((e) => e.isUpcoming).toList();
-            final cities = EventService.distinctCities(upcoming);
-            // A city that no longer has upcoming events falls back to nearby.
-            final filter = _cityFilter != null &&
-                    cities.any((c) => c.toLowerCase() == _cityFilter!.toLowerCase())
-                ? _cityFilter
-                : null;
-            final header = _cityFilterRow(context, cities, filter);
-            if (upcoming.isEmpty) {
-              return _message(Icons.event_outlined, 'No upcoming events',
-                  'Check back soon for upcoming conventions.');
-            }
-            // City chosen: only that city's events, by date (the stream is
-            // already date-ordered) — distance from me no longer applies.
-            // No city: the default GPS nearby ordering.
-            final sorted = filter != null
-                ? [
-                    for (final e in upcoming)
-                      if (e.city.trim().toLowerCase() == filter.toLowerCase())
-                        _EventWithDistance(e, null)
-                  ]
-                : _sortByDistance(upcoming);
-            return Column(children: [
-              header,
-              switch (_view) {
-                _EventView.list => _listView(context, sorted),
-                _EventView.map => _mapView(context, sorted),
-                _EventView.calendar => _calendarView(context, sorted),
-              },
-            ]);
-          },
+              // One filter drives List, Map and Calendar alike.
+              final matches = applyEventFilter(
+                  visible, effective, location, user?.followedFandomIds ?? const [], now);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  EventFilterBar(
+                    filter: effective,
+                    searchController: _searchCtr,
+                    cities: cities,
+                    hasLocation: location != null,
+                    signedIn: user != null,
+                    onChanged: (f) => setState(() => _filter = f),
+                    onClearAll: _clearAll,
+                  ),
+                  const SizedBox(height: 14),
+                  if (matches.isEmpty)
+                    _noMatches(effective)
+                  else
+                    switch (_view) {
+                      _EventView.list => _listView(context, matches),
+                      _EventView.map => _mapView(context, matches),
+                      _EventView.calendar => _calendarView(context, matches),
+                    },
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Nothing matches: say which filters are on and offer Clear all.
+  Widget _noMatches(EventFilter filter) {
+    final active = describeEventFilter(filter);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      child: Column(children: [
+        const Icon(Icons.filter_alt_off_outlined, color: AppTheme.textMuted, size: 36),
+        const SizedBox(height: 10),
+        Text('No events match your filters', style: AppTheme.inter(size: 15, weight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        Text(active.join(' · '),
+            textAlign: TextAlign.center,
+            style: AppTheme.inter(size: 13, color: AppTheme.textMuted)),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _clearAll,
+          style: OutlinedButton.styleFrom(side: const BorderSide(color: AppTheme.cyan)),
+          icon: const Icon(Icons.clear_all, size: 18, color: AppTheme.cyan),
+          label: Text('Clear all', style: AppTheme.inter(size: 13, weight: FontWeight.w600, color: AppTheme.cyan)),
         ),
-      ],
+      ]),
     );
   }
 
@@ -327,78 +401,24 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
         ]),
       );
 
-  /// City filter: an explicit second way to narrow events, independent of
-  /// GPS. Cities come from the upcoming events themselves.
-  Widget _cityFilterRow(BuildContext context, List<String> cities, String? filter) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Row(children: [
-        Expanded(
-          child: Material(
-            color: AppTheme.card,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: cities.isEmpty ? null : () => _pickCity(context, cities, filter),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: filter != null ? AppTheme.cyan : AppTheme.border),
-                ),
-                child: Row(children: [
-                  Icon(Icons.location_city, size: 18, color: filter != null ? AppTheme.cyan : AppTheme.textMuted),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      filter != null ? '$filter · sorted by date' : 'All cities (nearby first)',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTheme.inter(
-                          size: 13,
-                          weight: FontWeight.w600,
-                          color: filter != null ? Colors.white : AppTheme.textSecondary),
-                    ),
-                  ),
-                  const Icon(Icons.expand_more, size: 18, color: AppTheme.textMuted),
-                ]),
-              ),
-            ),
-          ),
-        ),
-        if (filter != null)
-          TextButton.icon(
-            onPressed: () => setState(() => _cityFilter = null),
-            icon: const Icon(Icons.near_me, size: 16, color: AppTheme.cyan),
-            label: Text('Back to nearby',
-                style: AppTheme.inter(size: 12, weight: FontWeight.w600, color: AppTheme.cyan)),
-          ),
-      ]),
-    );
-  }
-
-  Future<void> _pickCity(BuildContext context, List<String> cities, String? current) async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.card,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _CityPickerSheet(cities: cities, current: current),
-    );
-    if (picked == null || !mounted) return;
-    setState(() => _cityFilter = picked.isEmpty ? null : picked);
-  }
-
   /// Month grid with a dot on every day that has an upcoming event (after
-  /// the city filter). Past months can be browsed but show no events, since
-  /// past events are excluded. The tapped day's events list below the grid.
-  Widget _calendarView(BuildContext context, List<_EventWithDistance> events) {
-    final byDay = <DateTime, List<_EventWithDistance>>{};
+  /// all filters). Past months can be browsed but show no events, since
+  /// ended events are excluded. The tapped day's events list below the grid.
+  /// A multi-day event is marked on every day it runs (capped at 60 days).
+  Widget _calendarView(BuildContext context, List<EventMatch> events) {
+    final byDay = <DateTime, List<EventMatch>>{};
     for (final e in events) {
-      final d = e.event.date;
-      byDay.putIfAbsent(DateTime(d.year, d.month, d.day), () => []).add(e);
+      final start = e.event.date;
+      // Last day the event runs; an end at exactly midnight belongs to the
+      // day before.
+      final last = e.event.effectiveEnd.subtract(const Duration(microseconds: 1));
+      var day = DateTime(start.year, start.month, start.day);
+      for (var i = 0; i < 60 && (i == 0 || !day.isAfter(last)); i++) {
+        byDay.putIfAbsent(day, () => []).add(e);
+        day = DateTime(day.year, day.month, day.day + 1);
+      }
     }
-    List<_EventWithDistance> forDay(DateTime d) => byDay[DateTime(d.year, d.month, d.day)] ?? const [];
+    List<EventMatch> forDay(DateTime d) => byDay[DateTime(d.year, d.month, d.day)] ?? const [];
     final now = DateTime.now();
     final dayEvents = forDay(_selectedDay);
     return Column(
@@ -411,7 +431,7 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppTheme.border),
           ),
-          child: TableCalendar<_EventWithDistance>(
+          child: TableCalendar<EventMatch>(
             firstDay: DateTime(now.year - 1, 1, 1),
             lastDay: DateTime(now.year + 5, 12, 31),
             focusedDay: _focusedDay,
@@ -424,7 +444,7 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
               _selectedDay = selected;
               _focusedDay = focused;
             }),
-            onPageChanged: (focused) => _focusedDay = focused,
+            onPageChanged: (focused) => setState(() => _focusedDay = focused),
             headerStyle: HeaderStyle(
               titleCentered: true,
               formatButtonVisible: false,
@@ -451,13 +471,49 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
               markersMaxCount: 3,
               markerSize: 5,
             ),
+            // table_calendar draws "selected" instead of "today" when a day is
+            // both — and today starts selected — so today lost its marking.
+            // Keep today's cyan ring on top of the selected fill.
+            calendarBuilders: CalendarBuilders(
+              selectedBuilder: (context, day, focused) {
+                if (!isSameDay(day, now)) return null; // default selected look
+                return Center(
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppTheme.cyan, width: 2),
+                    ),
+                    child: Text('${day.day}',
+                        style: AppTheme.inter(size: 13, color: Colors.white, weight: FontWeight.w800)),
+                  ),
+                );
+              },
+            ),
           ),
         ),
         const SizedBox(height: 16),
-        Text(
-          '${_months[_selectedDay.month - 1]} ${_selectedDay.day}, ${_selectedDay.year}',
-          style: AppTheme.orbitron(size: 12, weight: FontWeight.w700, color: AppTheme.textSecondary),
-        ),
+        Row(children: [
+          Expanded(
+            child: Text(
+              '${isSameDay(_selectedDay, now) ? 'TODAY · ' : ''}'
+              '${_months[_selectedDay.month - 1]} ${_selectedDay.day}, ${_selectedDay.year}',
+              style: AppTheme.orbitron(size: 12, weight: FontWeight.w700, color: AppTheme.textSecondary),
+            ),
+          ),
+          if (!isSameDay(_selectedDay, now) || _focusedDay.year != now.year || _focusedDay.month != now.month)
+            TextButton.icon(
+              onPressed: () => setState(() {
+                _focusedDay = now;
+                _selectedDay = now;
+              }),
+              icon: const Icon(Icons.today_outlined, size: 16, color: AppTheme.cyan),
+              label: Text('Today', style: AppTheme.inter(size: 12, weight: FontWeight.w600, color: AppTheme.cyan)),
+            ),
+        ]),
         const SizedBox(height: 10),
         if (dayEvents.isEmpty)
           Container(
@@ -509,13 +565,13 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
         ),
       );
 
-  Widget _listView(BuildContext context, List<_EventWithDistance> events) =>
+  Widget _listView(BuildContext context, List<EventMatch> events) =>
       Column(children: [for (final e in events) _eventCard(context, e)]);
 
-  Widget _mapView(BuildContext context, List<_EventWithDistance> events) {
+  Widget _mapView(BuildContext context, List<EventMatch> events) {
     final withCoords = events.where((e) => e.event.hasCoordinates).toList();
-    // With a city chosen, centre on that city's events instead of the Fan.
-    final cityMode = _cityFilter != null && withCoords.isNotEmpty;
+    // With a city chosen, centre on the results instead of the Fan.
+    final cityMode = _filter.cities.isNotEmpty && withCoords.isNotEmpty;
     final center = cityMode
         ? LatLng(withCoords.first.event.latitude!, withCoords.first.event.longitude!)
         : _fanPosition != null
@@ -523,213 +579,68 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
             : withCoords.isNotEmpty
                 ? LatLng(withCoords.first.event.latitude!, withCoords.first.event.longitude!)
                 : const LatLng(20, 0);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(
-        height: 420,
-        child: FlutterMap(
-          // Rebuilt per filter so the camera moves to the new centre.
-          key: ValueKey(_cityFilter),
-          options: MapOptions(
-              initialCenter: center, initialZoom: cityMode || _fanPosition != null ? 11 : 2),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.example.fandom_verse',
-            ),
-            MarkerLayer(markers: [
-              if (_fanPosition != null)
-                Marker(
-                  point: LatLng(_fanPosition!.latitude, _fanPosition!.longitude),
-                  width: 20,
-                  height: 20,
-                  child: const Icon(Icons.my_location, color: AppTheme.cyan, size: 20),
-                ),
-              for (final e in withCoords)
-                Marker(
-                  point: LatLng(e.event.latitude!, e.event.longitude!),
-                  width: 36,
-                  height: 36,
-                  child: GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => EventDetailScreen(event: e.event)),
-                    ),
-                    child: const Icon(Icons.location_pin, color: AppTheme.pink, size: 36),
-                  ),
-                ),
-            ]),
-            RichAttributionWidget(
-              attributions: [TextSourceAttribution('OpenStreetMap contributors')],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _eventCard(BuildContext context, _EventWithDistance ewd) {
-    final ev = ewd.event;
-    final price = ev.ticketPrice.isEmpty ? 'Free' : ev.ticketPrice;
-    final place = [ev.venue, ev.city].where((x) => x.trim().isNotEmpty).join(', ');
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: AppTheme.card,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => EventDetailScreen(event: ev)),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.border),
-            ),
-            child: Row(
+          child: SizedBox(
+            height: 420,
+            child: FlutterMap(
+              // Rebuilt when the filtered set changes so the camera moves to
+              // the new centre.
+              key: ValueKey(withCoords.map((e) => e.event.id).join(',')),
+              options: MapOptions(
+                  initialCenter: center, initialZoom: cityMode || _fanPosition != null ? 11 : 2),
               children: [
-                Container(
-                  width: 60,
-                  height: 66,
-                  decoration: BoxDecoration(
-                    color: AppTheme.pink.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.pink.withValues(alpha: 0.4)),
-                  ),
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Text(_months[ev.date.month - 1],
-                        style: AppTheme.inter(size: 11, weight: FontWeight.w700, color: AppTheme.pink)),
-                    Text('${ev.date.day}', style: AppTheme.orbitron(size: 22, weight: FontWeight.w800)),
-                  ]),
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.example.fandom_verse',
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(ev.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTheme.inter(size: 15, weight: FontWeight.w600, height: 1.3)),
-                      const SizedBox(height: 4),
-                      Text(place,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTheme.inter(size: 12, color: AppTheme.textSecondary)),
-                      const SizedBox(height: 6),
-                      Row(children: [
-                        Flexible(
-                          child: Text(price,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTheme.inter(size: 12, weight: FontWeight.w600, color: AppTheme.cyan)),
+                MarkerLayer(markers: [
+                  if (_fanPosition != null)
+                    Marker(
+                      point: LatLng(_fanPosition!.latitude, _fanPosition!.longitude),
+                      width: 20,
+                      height: 20,
+                      child: const Icon(Icons.my_location, color: AppTheme.cyan, size: 20),
+                    ),
+                  // Each pin takes its event type's colour (see the legend).
+                  for (final e in withCoords)
+                    Marker(
+                      point: LatLng(e.event.latitude!, e.event.longitude!),
+                      width: 36,
+                      height: 36,
+                      child: GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => EventDetailScreen(event: e.event)),
                         ),
-                        if (ewd.distanceKm != null) ...[
-                          Text('  ·  ', style: AppTheme.inter(size: 12, color: AppTheme.textMuted)),
-                          Flexible(
-                            child: Text(_distanceLabel(ewd.distanceKm!),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTheme.inter(size: 12, color: AppTheme.textMuted)),
-                          ),
-                        ],
-                      ]),
-                    ],
-                  ),
+                        child: Icon(Icons.location_pin, color: e.event.eventType.color, size: 36),
+                      ),
+                    ),
+                ]),
+                RichAttributionWidget(
+                  attributions: [TextSourceAttribution('OpenStreetMap contributors')],
                 ),
-                const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
               ],
             ),
           ),
         ),
-      ),
+        const SizedBox(height: 10),
+        Wrap(spacing: 14, runSpacing: 6, children: [
+          for (final t in EventType.values)
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.circle, color: t.color, size: 10),
+              const SizedBox(width: 5),
+              Text(t == EventType.other ? 'Other' : t.label,
+                  style: AppTheme.inter(size: 11, color: AppTheme.textSecondary)),
+            ]),
+        ]),
+      ],
     );
   }
 
-  String _distanceLabel(double km) =>
-      km < 10 ? '${km.toStringAsFixed(1)} km away' : '${km.round()} km away';
-}
-
-/// Searchable list of the cities that have upcoming events. Pops the chosen
-/// city, or '' for "All cities (nearby)".
-class _CityPickerSheet extends StatefulWidget {
-  final List<String> cities;
-  final String? current;
-  const _CityPickerSheet({required this.cities, required this.current});
-
-  @override
-  State<_CityPickerSheet> createState() => _CityPickerSheetState();
-}
-
-class _CityPickerSheetState extends State<_CityPickerSheet> {
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final q = _query.trim().toLowerCase();
-    final shown = widget.cities.where((c) => c.toLowerCase().contains(q)).toList();
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
-              child: Text('Filter by city', style: AppTheme.orbitron(size: 14, weight: FontWeight.w700)),
-            ),
-            if (widget.cities.length > 6)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: TextField(
-                  onChanged: (v) => setState(() => _query = v),
-                  style: AppTheme.inter(size: 14, color: Colors.white),
-                  decoration: const InputDecoration(
-                    hintText: 'Search cities',
-                    prefixIcon: Icon(Icons.search, size: 18),
-                  ),
-                ),
-              ),
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.only(bottom: 16),
-                children: [
-                  if (q.isEmpty)
-                    ListTile(
-                      leading: const Icon(Icons.near_me, color: AppTheme.cyan),
-                      title: Text('All cities (nearby first)', style: AppTheme.inter(size: 14)),
-                      trailing: widget.current == null
-                          ? const Icon(Icons.check, color: AppTheme.cyan)
-                          : null,
-                      onTap: () => Navigator.pop(context, ''),
-                    ),
-                  for (final c in shown)
-                    ListTile(
-                      leading: const Icon(Icons.location_city, color: AppTheme.textMuted),
-                      title: Text(c, style: AppTheme.inter(size: 14)),
-                      trailing: widget.current?.toLowerCase() == c.toLowerCase()
-                          ? const Icon(Icons.check, color: AppTheme.cyan)
-                          : null,
-                      onTap: () => Navigator.pop(context, c),
-                    ),
-                  if (shown.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Text('No city matches "$_query".',
-                          style: AppTheme.inter(size: 13, color: AppTheme.textMuted)),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _eventCard(BuildContext context, EventMatch ewd) =>
+      EventCard(event: ewd.event, distanceKm: ewd.distanceKm);
 }

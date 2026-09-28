@@ -52,8 +52,7 @@ class _CategoryPickerFieldState extends State<CategoryPickerField> {
         return GestureDetector(
           onTap: isLoading ? null : () => _openPicker(context, activeCats),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
             decoration: BoxDecoration(
               color: AppTheme.card,
               borderRadius: BorderRadius.circular(12),
@@ -63,9 +62,10 @@ class _CategoryPickerFieldState extends State<CategoryPickerField> {
               children: [
                 Expanded(
                   child: isLoading
-                      ? Text('Loading…',
-                          style: AppTheme.inter(
-                              size: 13, color: Colors.grey))
+                      ? Text(
+                          'Loading…',
+                          style: AppTheme.inter(size: 13, color: Colors.grey),
+                        )
                       : Text(
                           displayName ?? 'Select category',
                           style: AppTheme.inter(
@@ -81,11 +81,12 @@ class _CategoryPickerFieldState extends State<CategoryPickerField> {
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(
-                        strokeWidth: 1.5, color: AppTheme.border),
+                      strokeWidth: 1.5,
+                      color: AppTheme.border,
+                    ),
                   )
                 else
-                  Icon(Icons.expand_more,
-                      color: widget.accentColor, size: 20),
+                  Icon(Icons.expand_more, color: widget.accentColor, size: 20),
               ],
             ),
           ),
@@ -95,6 +96,7 @@ class _CategoryPickerFieldState extends State<CategoryPickerField> {
   }
 
   void _openPicker(BuildContext context, List<AppCategory> activeCats) {
+    var query = '';
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.card,
@@ -102,67 +104,145 @@ class _CategoryPickerFieldState extends State<CategoryPickerField> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.55,
-        minChildSize: 0.3,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (ctx, ctrl) => Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final q = query.trim().toLowerCase();
+          final shown = q.isEmpty
+              ? activeCats
+              : activeCats
+                    .where((c) => c.name.toLowerCase().contains(q))
+                    .toList();
+          return Padding(
+            // Keeps the search box and results above the keyboard.
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(ctx).bottom,
             ),
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: DraggableScrollableSheet(
+              initialChildSize: 0.55,
+              minChildSize: 0.3,
+              maxChildSize: 0.9,
+              expand: false,
+              builder: (ctx, ctrl) => Column(
                 children: [
-                  Text('Select Category', style: AppTheme.orbitron(size: 11)),
-                  TextButton(
-                    onPressed: () {
-                      widget.onChanged(null);
-                      Navigator.pop(ctx);
-                    },
-                    child: Text('Clear',
-                        style:
-                            AppTheme.inter(size: 12, color: Colors.grey)),
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppTheme.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Select Category',
+                          style: AppTheme.orbitron(size: 11),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            widget.onChanged(null);
+                            Navigator.pop(ctx);
+                          },
+                          child: Text(
+                            'Clear',
+                            style: AppTheme.inter(size: 12, color: Colors.grey),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                    child: TextField(
+                      onChanged: (v) => setSheetState(() => query = v),
+                      style: AppTheme.inter(size: 13, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Search categories…',
+                        hintStyle: AppTheme.inter(size: 13, color: Colors.grey),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.grey,
+                          size: 18,
+                        ),
+                        filled: true,
+                        fillColor: AppTheme.bg,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppTheme.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppTheme.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: widget.accentColor),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Divider(color: AppTheme.border, height: 1),
+                  Expanded(
+                    child: shown.isEmpty
+                        ? Center(
+                            child: Text(
+                              activeCats.isEmpty
+                                  ? 'No active categories yet'
+                                  : 'No categories match "${query.trim()}"',
+                              style: AppTheme.inter(
+                                size: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          )
+                        : ListView(
+                            controller: ctrl,
+                            padding: const EdgeInsets.only(bottom: 24),
+                            children: shown
+                                .map(
+                                  (c) => ListTile(
+                                    dense: true,
+                                    leading: _catThumb(c, size: 32),
+                                    title: Text(
+                                      c.name,
+                                      style: AppTheme.inter(
+                                        size: 13,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    trailing: widget.value == c.key
+                                        ? Icon(
+                                            Icons.check,
+                                            color: widget.accentColor,
+                                            size: 18,
+                                          )
+                                        : null,
+                                    onTap: () {
+                                      widget.onChanged(c.key);
+                                      Navigator.pop(ctx);
+                                    },
+                                  ),
+                                )
+                                .toList(),
+                          ),
                   ),
                 ],
               ),
             ),
-            const Divider(color: AppTheme.border, height: 1),
-            Expanded(
-              child: ListView(
-                controller: ctrl,
-                padding: const EdgeInsets.only(bottom: 24),
-                children: activeCats
-                    .map((c) => ListTile(
-                          dense: true,
-                          leading: _catThumb(c, size: 32),
-                          title: Text(c.name,
-                              style: AppTheme.inter(
-                                  size: 13, color: Colors.white)),
-                          trailing: widget.value == c.key
-                              ? Icon(Icons.check,
-                                  color: widget.accentColor, size: 18)
-                              : null,
-                          onTap: () {
-                            widget.onChanged(c.key);
-                            Navigator.pop(ctx);
-                          },
-                        ))
-                    .toList(),
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -185,12 +265,15 @@ Widget _catThumb(AppCategory cat, {double size = 32}) {
 }
 
 Widget _thumbPlaceholder(double size) => Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: AppTheme.accent.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Icon(Icons.category_outlined,
-          color: AppTheme.accent, size: size * 0.5),
-    );
+  width: size,
+  height: size,
+  decoration: BoxDecoration(
+    color: AppTheme.accent.withValues(alpha: 0.15),
+    borderRadius: BorderRadius.circular(6),
+  ),
+  child: Icon(
+    Icons.category_outlined,
+    color: AppTheme.accent,
+    size: size * 0.5,
+  ),
+);

@@ -170,4 +170,35 @@ class LocationService {
       return null;
     }
   }
+
+  /// Admin event form: reverse-geocodes a map pin to its city and a street
+  /// address in one Nominatim call (zoom 18 = building level; the address
+  /// object still includes the city). Either part is null when missing.
+  Future<({String? city, String? address})> reverseGeocodeAddress(double lat, double lon) async {
+    final uri = Uri.parse(
+      'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=$lat&lon=$lon&zoom=18&accept-language=en',
+    );
+    try {
+      final res = await http.get(
+        uri,
+        headers: {'User-Agent': 'FandomVerseApp/1.0 (com.example.fandom_verse)'},
+      ).timeout(_geocodeTimeout);
+      if (res.statusCode != 200) {
+        _log('address geocode failed: HTTP ${res.statusCode}');
+        return (city: null, address: null);
+      }
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final parts = data['address'] as Map<String, dynamic>?;
+      final city = (parts?['city'] ?? parts?['town'] ?? parts?['village'] ?? parts?['county'])
+          as String?;
+      final address = data['display_name'] as String?;
+      return (
+        city: (city == null || city.isEmpty) ? null : city,
+        address: (address == null || address.isEmpty) ? null : address,
+      );
+    } catch (e) {
+      _log('address geocode failed: $e');
+      return (city: null, address: null);
+    }
+  }
 }

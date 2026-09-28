@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import 'admin_dashboard.dart';
+import '../avatars/avatar_library_screen.dart';
 import '../categories/category_management_screen.dart';
 import '../content/content_moderation_screen.dart';
+import '../creators/creator_management_screen.dart';
+import '../fandoms/fandom_management_screen.dart';
+import '../tags/tag_management_screen.dart';
 import '../glossary/glossary_management_screen.dart';
 import '../onboarding_slides/onboarding_slide_management_screen.dart';
 import '../orders/order_management_screen.dart';
@@ -42,9 +46,38 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int _selectedIndex = 0;
 
+  // BACK-NAVIGATION — read before adding a new section or dashboard link.
+  // The whole admin panel is ONE route: sections are swapped inside this
+  // shell's IndexedStack (sidebar, drawer and dashboard cards all call
+  // _go), not pushed as routes. Without this history, Android back / the
+  // browser back button popped the entire AdminShell and dumped the admin
+  // out of the panel instead of returning to Dashboard. So:
+  //  • switch sections ONLY via _go (or AdminShell.openSection) — never
+  //    setState(_selectedIndex) directly, or back will skip that section;
+  //  • real sub-screens (forms, order detail) are still pushed with
+  //    Navigator.push, which stacks on top and pops back here normally.
+  // Back walks this history, ends at Dashboard, and only then leaves admin.
+  final List<int> _history = [];
+
+  void _go(int index) {
+    if (index == _selectedIndex) return;
+    setState(() {
+      if (index == 0) {
+        _history.clear(); // Dashboard is the root: nothing behind it
+      } else {
+        _history.add(_selectedIndex);
+      }
+      _selectedIndex = index;
+    });
+  }
+
+  void _back() => setState(() {
+        _selectedIndex = _history.isNotEmpty ? _history.removeLast() : 0;
+      });
+
   void _selectByLabel(String label) {
     final i = _navItems.indexWhere((e) => e.label == label);
-    if (i >= 0) setState(() => _selectedIndex = i);
+    if (i >= 0) _go(i);
   }
 
   static final List<_NavItem> _navItems = [
@@ -85,6 +118,24 @@ class _AdminShellState extends State<AdminShell> {
       child: const CategoryManagementScreen(),
     ),
     _NavItem(
+      icon: Icons.hub_outlined,
+      label: 'Fandoms',
+      color: AppTheme.pink,
+      child: const FandomManagementScreen(),
+    ),
+    _NavItem(
+      icon: Icons.record_voice_over_outlined,
+      label: 'Creators',
+      color: AppTheme.orange,
+      child: const CreatorManagementScreen(),
+    ),
+    _NavItem(
+      icon: Icons.sell_outlined,
+      label: 'Tags',
+      color: AppTheme.cyan,
+      child: const TagManagementScreen(),
+    ),
+    _NavItem(
       icon: Icons.menu_book_outlined,
       label: 'Glossary',
       color: AppTheme.cyan,
@@ -95,6 +146,12 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Onboarding',
       color: AppTheme.pink,
       child: const OnboardingSlideManagementScreen(),
+    ),
+    _NavItem(
+      icon: Icons.face_retouching_natural,
+      label: 'Avatars',
+      color: AppTheme.cyan,
+      child: const AvatarLibraryScreen(),
     ),
   ];
 
@@ -187,6 +244,18 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Only leave the admin panel from Dashboard; any other section goes
+    // back through _history (see the note on _history above).
+    return PopScope(
+      canPop: _selectedIndex == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: _layout(),
+    );
+  }
+
+  Widget _layout() {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth >= 600) {
@@ -199,7 +268,7 @@ class _AdminShellState extends State<AdminShell> {
                 _SideRail(
                   items: _navItems,
                   selectedIndex: _selectedIndex,
-                  onTap: (i) => setState(() => _selectedIndex = i),
+                  onTap: _go,
                 ),
                 Container(width: 1, color: AppTheme.border),
                 Expanded(
@@ -220,8 +289,8 @@ class _AdminShellState extends State<AdminShell> {
               items: _navItems,
               selectedIndex: _selectedIndex,
               onTap: (i) {
-                setState(() => _selectedIndex = i);
-                Navigator.pop(context);
+                _go(i);
+                Navigator.pop(context); // closes the drawer only
               },
             ),
             body: IndexedStack(
