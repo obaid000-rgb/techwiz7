@@ -10,6 +10,8 @@ import '../../../widgets/image_upload_field.dart';
 import 'widgets/agenda_editor.dart';
 import 'widgets/location_picker_field.dart';
 
+const String _kCoverMessage = 'Add a cover image so the event looks right in the app';
+
 class EventFormScreen extends StatefulWidget {
   final EventItem? existing;
   const EventFormScreen({super.key, this.existing});
@@ -258,7 +260,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
               onChanged: (list) => setState(() => _sessions = list),
             ),
             const SizedBox(height: 16),
-            _label('Event Image (optional)'),
+            _label(widget.existing == null ? 'Cover Image *' : 'Cover Image'),
             ImageUploadField(
               initialUrl: _imageUrl.isEmpty ? null : _imageUrl,
               onUploaded: (url) => setState(() => _imageUrl = url),
@@ -272,6 +274,16 @@ class _EventFormScreenState extends State<EventFormScreen> {
                 padding: const EdgeInsets.only(top: 6),
                 child: Text('Wait for the image to finish uploading',
                     style: AppTheme.inter(size: 11, color: Colors.grey)),
+              )
+            else if (_imageUrl.isEmpty)
+              // Required for new events (checked in _save); an existing
+              // event without one only gets this reminder.
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(_kCoverMessage,
+                    style: AppTheme.inter(
+                        size: 11,
+                        color: widget.existing == null && _showErrors ? Colors.redAccent : AppTheme.orange)),
               ),
             const SizedBox(height: 16),
             Container(
@@ -446,6 +458,14 @@ class _EventFormScreenState extends State<EventFormScreen> {
   Future<void> _save() async {
     if (_imageBusy) {
       setState(() => _error = 'Wait for the image to finish uploading.');
+      return;
+    }
+    // New events need a cover so their card looks right in the app.
+    if (widget.existing == null && _imageUrl.isEmpty) {
+      setState(() {
+        _showErrors = true;
+        _error = _kCoverMessage;
+      });
       return;
     }
     final event = _draft();

@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../utils/levels.dart';
 import '../utils/youtube_utils.dart';
 import 'category_name.dart';
+import 'deep_dive_lock.dart';
 import 'trending_badge.dart';
 import '../screens/explore/video_player_screen.dart';
 
@@ -68,7 +69,7 @@ class LoreCard extends StatelessWidget {
                 ),
               ),
               Positioned(top: 8, right: 8, child: TrendingBadge(postId: post.id)),
-              if (post.contentDepth == 'deep')
+              if (isDeepDive(post))
                 Positioned(left: 8, bottom: 8, child: const DeepDiveLockBadge()),
             ],
           ),
@@ -84,10 +85,8 @@ class LoreCard extends StatelessWidget {
                   style: AppTheme.orbitron(size: 13, weight: FontWeight.w700),
                 ),
                 const SizedBox(height: 5),
-                Text(
-                  post.content,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                PostExcerpt(
+                  post: post,
                   style:
                       AppTheme.inter(size: 12, color: Colors.grey, height: 1.4),
                 ),
@@ -326,7 +325,7 @@ class _PostMediaThumbnailState extends State<PostMediaThumbnail> {
       );
 }
 
-/// Lock badge on Deep Dive cards while the viewer is below Level 4
+/// Lock badge on Deep Dive cards while the viewer is below Level DEEP_DIVE_LEVEL
 /// (hidden for admins and for fans who have unlocked Deep Dive).
 class DeepDiveLockBadge extends StatelessWidget {
   const DeepDiveLockBadge({super.key});
@@ -335,8 +334,7 @@ class DeepDiveLockBadge extends StatelessWidget {
   Widget build(BuildContext context) => ValueListenableBuilder<UserData?>(
         valueListenable: AuthService.instance.userNotifier,
         builder: (context, user, _) {
-          final open = canOpenDeepDive(
-              signedIn: user != null, isAdmin: user?.isAdmin ?? false, xp: user?.xp ?? 0);
+          final open = canViewDeepDive(user);
           if (open) return const SizedBox.shrink();
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -350,7 +348,7 @@ class DeepDiveLockBadge extends StatelessWidget {
               children: [
                 const Icon(Icons.lock_rounded, color: AppTheme.orange, size: 12),
                 const SizedBox(width: 4),
-                Text('Level $kDeepDiveLevel',
+                Text('Level $DEEP_DIVE_LEVEL',
                     style: AppTheme.inter(size: 10, color: Colors.white, weight: FontWeight.w700)),
               ],
             ),

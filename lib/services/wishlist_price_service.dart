@@ -19,16 +19,7 @@ class WishlistPriceChange {
   bool get isDrop => newPrice < oldPrice;
 }
 
-/// Client-side wishlist price-change detection — no Cloud Functions, no FCM.
-///
-/// Each wishlisted product has a stored `lastSeenPrice`. A check compares
-/// every wishlisted product's live price with it; on any difference (up or
-/// down) it posts one local notification per product, then moves the
-/// baseline to the new price (keeping the old one as `previousPrice` for the
-/// Wishlist badge), so the same change never alerts twice.
-///
-/// Checks run when the app returns to the foreground, when a user signs in
-/// (covers cold start), and whenever the Wishlist screen opens.
+
 class WishlistPriceService {
   static final WishlistPriceService instance = WishlistPriceService._();
   WishlistPriceService._();
@@ -60,7 +51,6 @@ class WishlistPriceService {
     if (uid == null) _lastUid = null;
   }
 
-  /// Runs one check (concurrent callers share the same run). Never throws.
   Future<List<WishlistPriceChange>> checkNow() {
     final existing = _inFlight;
     if (existing != null) return existing;
@@ -86,8 +76,7 @@ class WishlistPriceService {
         if (product == null) continue; // deleted product: nothing to compare
         final stored = user.wishlistPrices[id];
         if (stored == null) {
-          // Wishlisted before price tracking existed: start the baseline now,
-          // silently — there's no earlier price to compare against.
+    
           updates[id] = WishlistPrice(product.price);
         } else if (differs(product.price, stored.lastSeenPrice)) {
           updates[id] = WishlistPrice(product.price, stored.lastSeenPrice);
@@ -98,10 +87,7 @@ class WishlistPriceService {
         _log('checked ${products.length} item(s): no price changes');
         return const [];
       }
-      // Save the new baselines FIRST: if this write fails, nothing is
-      // announced and the next check retries — no duplicate alerts. Offline
-      // the write never completes (it's queued and synced later), so a
-      // timeout counts as saved instead of blocking this check forever.
+
       try {
         await UserService.instance
             .setWishlistPrices(user.uid, updates)
@@ -115,13 +101,10 @@ class WishlistPriceService {
           wishlistPrices: {...current.wishlistPrices, ...updates},
         );
       }
-      // One notification per product (not one grouped summary): each is
-      // its own actionable item, a later change to the same product replaces
-      // its notification, and Android bundles several automatically.
+
       for (final c in changes) {
         _log('${c.name}: ${money(c.oldPrice)} -> ${money(c.newPrice)}');
-        // Each alert on its own: one failing must not skip the others (the
-        // Wishlist badge still shows every change either way).
+
         try {
           await NotificationService.instance.showPriceAlert(
             productId: c.productId,
@@ -139,8 +122,7 @@ class WishlistPriceService {
     }
   }
 
-  /// Clears the "price changed" badge for one product once the fan has
-  /// opened it (drops previousPrice, keeps the current baseline).
+
   Future<void> acknowledge(String productId) async {
     final user = AuthService.instance.currentUser;
     final entry = user?.wishlistPrices[productId];

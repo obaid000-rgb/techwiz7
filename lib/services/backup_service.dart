@@ -91,12 +91,7 @@ class BackupService {
       .snapshots()
       .map((s) => s.docs.isEmpty ? null : BackupRecord.fromMap(s.docs.first.data(), s.docs.first.id));
 
-  /// Converts Firestore values to plain JSON:
-  ///  - Timestamp -> ISO-8601 string in UTC ("2026-09-28T10:15:00.000Z"), so
-  ///    the file is readable anywhere and sorts correctly as text;
-  ///  - GeoPoint -> { "lat": .., "lng": .. };
-  ///  - DocumentReference -> its path; Blob -> base64;
-  ///  - maps and lists are converted recursively.
+  
   static Object? toJsonValue(Object? v) {
     if (v is Timestamp) return v.toDate().toUtc().toIso8601String();
     if (v is DateTime) return v.toUtc().toIso8601String();
@@ -114,9 +109,6 @@ class BackupService {
     return 'fandom_verse_backup_${t.year}-${two(t.month)}-${two(t.day)}_${two(t.hour)}${two(t.minute)}.json';
   }
 
-  /// Reads everything, writes the JSON file, opens the share sheet and
-  /// records the backup. A collection that can't be read is listed in
-  /// warnings instead of failing the whole export.
   Future<BackupResult> exportAll() async {
     final db = FirestoreDb.instance;
     final now = DateTime.now();

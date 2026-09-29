@@ -6,6 +6,7 @@ class AppCategory {
   final String status; // 'active' | 'inactive'
   final int order;
   final String description; // optional short tagline/summary
+  // No longer used (the Home carousel shows trending fandoms); read only so old data loads, never written.
   final bool isFeaturedInCarousel;
   final bool showInOnboarding;
 
@@ -45,7 +46,6 @@ class AppCategory {
         'order': order,
         if (imageUrl != null) 'imageUrl': imageUrl,
         'description': description,
-        'isFeaturedInCarousel': isFeaturedInCarousel,
         'showInOnboarding': showInOnboarding,
       };
 

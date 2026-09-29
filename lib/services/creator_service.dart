@@ -29,8 +29,7 @@ class CreatorService {
   Future<List<Creator>> getAllActive() async =>
       (await getAll()).where((c) => c.isActive).toList();
 
-  /// One creator, live (null when the document doesn't exist), so a creator
-  /// deactivated by admin disappears from fan screens straight away.
+
   Stream<Creator?> watchById(String id) => _col.doc(id).snapshots().map((d) {
         final data = d.data();
         return data == null ? null : Creator.fromMap(data, d.id);

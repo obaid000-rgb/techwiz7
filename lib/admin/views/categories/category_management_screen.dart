@@ -16,10 +16,9 @@ class CategoryManagementScreen extends StatefulWidget {
 class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
   final _searchCtr = TextEditingController();
   String _query = '';
-  // Created once: rebuilding (e.g. on each search keystroke) must not
-  // resubscribe, or the list flashes a spinner and the keyboard closes.
-  late final Stream<List<AppCategory>> _categories =
-      CategoryService.instance.watchCategories();
+  // create search functionality
+  late final Stream<List<AppCategory>> _categories = CategoryService.instance
+      .watchCategories();
 
   @override
   void initState() {
@@ -43,20 +42,22 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
         if (snapshot.hasError && !snapshot.hasData) {
           debugPrint('Categories load error: ${snapshot.error}');
           return Center(
-              child: Text('Could not load categories. Check your connection and try again.',
-                  style: AppTheme.inter(color: Colors.red)));
+            child: Text(
+              'Could not load categories. Check your connection and try again.',
+              style: AppTheme.inter(color: Colors.red),
+            ),
+          );
         }
         if (!snapshot.hasData) {
           return const Center(
-              child: CircularProgressIndicator(color: AppTheme.orange));
+            child: CircularProgressIndicator(color: AppTheme.orange),
+          );
         }
         final cats = List<AppCategory>.from(snapshot.data ?? [])
           ..sort((a, b) => a.order.compareTo(b.order));
         final filtered = _query.isEmpty
             ? cats
-            : cats
-                .where((c) => c.name.toLowerCase().contains(_query))
-                .toList();
+            : cats.where((c) => c.name.toLowerCase().contains(_query)).toList();
         final isSearching = _query.isNotEmpty;
 
         return Column(
@@ -66,17 +67,19 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
             if (isSearching)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                child: Text('Clear search to drag-reorder',
-                    style: AppTheme.inter(size: 10, color: Colors.grey)),
+                child: Text(
+                  'Clear search to drag-reorder',
+                  style: AppTheme.inter(size: 10, color: Colors.grey),
+                ),
               ),
             Expanded(
               child: cats.isEmpty
                   ? _empty()
                   : filtered.isEmpty
-                      ? _noResults()
-                      : isSearching
-                          ? _plainList(context, filtered)
-                          : _reorderableList(context, cats),
+                  ? _noResults()
+                  : isSearching
+                  ? _plainList(context, filtered)
+                  : _reorderableList(context, cats),
             ),
           ],
         );
@@ -85,91 +88,101 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
   }
 
   Widget _header(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Categories', style: AppTheme.orbitron(size: 13)),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const CategoryFormScreen()),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.orange,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              icon: const Icon(Icons.add, size: 16),
-              label: Text('ADD', style: AppTheme.orbitron(size: 9)),
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text('Categories', style: AppTheme.orbitron(size: 13)),
+        ElevatedButton.icon(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CategoryFormScreen()),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.orange,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
             ),
-          ],
+          ),
+          icon: const Icon(Icons.add, size: 16),
+          label: Text('ADD', style: AppTheme.orbitron(size: 9)),
         ),
-      );
+      ],
+    ),
+  );
 
   Widget _searchBox() => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-        child: TextField(
-          controller: _searchCtr,
-          style: AppTheme.inter(size: 13, color: Colors.white),
-          decoration: InputDecoration(
-            hintText: 'Search categories…',
-            hintStyle: AppTheme.inter(size: 13, color: Colors.grey),
-            prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 18),
-            suffixIcon: _query.isEmpty
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.close, color: Colors.grey, size: 16),
-                    onPressed: () => _searchCtr.clear(),
-                  ),
-            filled: true,
-            fillColor: AppTheme.card,
-            isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppTheme.border)),
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppTheme.border)),
-            focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppTheme.orange)),
-          ),
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+    child: TextField(
+      controller: _searchCtr,
+      style: AppTheme.inter(size: 13, color: Colors.white),
+      decoration: InputDecoration(
+        hintText: 'Search categories…',
+        hintStyle: AppTheme.inter(size: 13, color: Colors.grey),
+        prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 18),
+        suffixIcon: _query.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close, color: Colors.grey, size: 16),
+                onPressed: () => _searchCtr.clear(),
+              ),
+        filled: true,
+        fillColor: AppTheme.card,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
         ),
-      );
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.orange),
+        ),
+      ),
+    ),
+  );
 
   Widget _empty() => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.category_outlined, color: Colors.grey, size: 36),
-            const SizedBox(height: 12),
-            Text('No categories yet',
-                style: AppTheme.inter(size: 13, color: Colors.grey)),
-            const SizedBox(height: 4),
-            Text('Tap ADD to create the first one',
-                style: AppTheme.inter(size: 11, color: Colors.grey)),
-          ],
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.category_outlined, color: Colors.grey, size: 36),
+        const SizedBox(height: 12),
+        Text(
+          'No categories yet',
+          style: AppTheme.inter(size: 13, color: Colors.grey),
         ),
-      );
+        const SizedBox(height: 4),
+        Text(
+          'Tap ADD to create the first one',
+          style: AppTheme.inter(size: 11, color: Colors.grey),
+        ),
+      ],
+    ),
+  );
 
   Widget _noResults() => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.search_off, color: Colors.grey, size: 36),
-            const SizedBox(height: 12),
-            Text('No categories match "${_searchCtr.text.trim()}"',
-                style: AppTheme.inter(size: 12, color: Colors.grey)),
-          ],
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.search_off, color: Colors.grey, size: 36),
+        const SizedBox(height: 12),
+        Text(
+          'No categories match "${_searchCtr.text.trim()}"',
+          style: AppTheme.inter(size: 12, color: Colors.grey),
         ),
-      );
+      ],
+    ),
+  );
 
   Widget _plainList(BuildContext context, List<AppCategory> cats) =>
       ListView.builder(
@@ -179,134 +192,154 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
             _catRow(context, cats[i], key: ValueKey(cats[i].id)),
       );
 
-  Widget _reorderableList(BuildContext context, List<AppCategory> cats) =>
-      ReorderableListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        itemCount: cats.length,
-        // onReorder (not the newer onReorderItem) so older Flutter SDKs build.
-        // ignore: deprecated_member_use
-        onReorder: (oldIndex, newIndex) async {
-          if (newIndex > oldIndex) newIndex -= 1;
-          final reordered = List<AppCategory>.from(cats);
-          final moved = reordered.removeAt(oldIndex);
-          reordered.insert(newIndex, moved);
-          final messenger = ScaffoldMessenger.of(context);
-          try {
-            await CategoryService.instance.reorderCategories(reordered);
-          } catch (e) {
-            debugPrint('Category reorder failed: $e');
-            if (!mounted) return;
-            messenger
-              ..hideCurrentSnackBar()
-              ..showSnackBar(const SnackBar(
-                  content: Text(
-                      'Could not save the new order. Check your connection and try again.')));
-          }
-        },
-        itemBuilder: (context, i) =>
-            _catRow(context, cats[i], key: ValueKey(cats[i].id)),
-      );
+  Widget _reorderableList(
+    BuildContext context,
+    List<AppCategory> cats,
+  ) => ReorderableListView.builder(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+    itemCount: cats.length,
+    // onReorder (not the newer onReorderItem) so older Flutter SDKs build.
+    // ignore: deprecated_member_use
+    onReorder: (oldIndex, newIndex) async {
+      if (newIndex > oldIndex) newIndex -= 1;
+      final reordered = List<AppCategory>.from(cats);
+      final moved = reordered.removeAt(oldIndex);
+      reordered.insert(newIndex, moved);
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await CategoryService.instance.reorderCategories(reordered);
+      } catch (e) {
+        debugPrint('Category reorder failed: $e');
+        if (!mounted) return;
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Could not save the new order. Check your connection and try again.',
+              ),
+            ),
+          );
+      }
+    },
+    itemBuilder: (context, i) =>
+        _catRow(context, cats[i], key: ValueKey(cats[i].id)),
+  );
 
-  Widget _catRow(BuildContext context, AppCategory cat, {required Key key}) =>
-      Container(
-        key: key,
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppTheme.card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.border),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.drag_indicator, color: Colors.grey, size: 18),
-            const SizedBox(width: 8),
-            _thumb(cat),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _catRow(
+    BuildContext context,
+    AppCategory cat, {
+    required Key key,
+  }) => Container(
+    key: key,
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    decoration: BoxDecoration(
+      color: AppTheme.card,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: AppTheme.border),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.drag_indicator, color: Colors.grey, size: 18),
+        const SizedBox(width: 8),
+        _thumb(cat),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(cat.name,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTheme.orbitron(
-                                size: 11, weight: FontWeight.w700)),
+                  Flexible(
+                    child: Text(
+                      cat.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.orbitron(
+                        size: 11,
+                        weight: FontWeight.w700,
                       ),
-                      if (cat.isFeaturedInCarousel) ...[
-                        const SizedBox(width: 6),
-                        Tooltip(
-                          message: 'Featured in Carousel',
-                          child: Icon(Icons.view_carousel,
-                              color: AppTheme.cyan, size: 13),
-                        ),
-                      ],
-                      if (cat.showInOnboarding) ...[
-                        const SizedBox(width: 6),
-                        const Tooltip(
-                          message: 'Shown in onboarding',
-                          child: Icon(Icons.waving_hand_outlined,
-                              color: AppTheme.accent, size: 13),
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 2),
-                  Text('key: ${cat.key}  •  order ${cat.order}',
-                      style: AppTheme.inter(size: 10, color: Colors.grey)),
-                  if (cat.description.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(cat.description,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style:
-                            AppTheme.inter(size: 10, color: Colors.white38)),
+                  if (cat.showInOnboarding) ...[
+                    const SizedBox(width: 6),
+                    const Tooltip(
+                      message: 'Shown in onboarding',
+                      child: Icon(
+                        Icons.waving_hand_outlined,
+                        color: AppTheme.accent,
+                        size: 13,
+                      ),
+                    ),
                   ],
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
-                    children: [_PostCountBadge(cat.key, key: ValueKey('count-${cat.key}')), _statusBadge(cat)],
-                  ),
                 ],
               ),
-            ),
-            const SizedBox(width: 4),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.folder_open_outlined,
-                  color: AppTheme.orange, size: 18),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => CategoryContentScreen(category: cat)),
+              const SizedBox(height: 2),
+              Text(
+                'key: ${cat.key}  •  order ${cat.order}',
+                style: AppTheme.inter(size: 10, color: Colors.grey),
               ),
-              tooltip: 'View Content',
-            ),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.edit_outlined,
-                  color: AppTheme.cyan, size: 18),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => CategoryFormScreen(existing: cat)),
+              if (cat.description.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  cat.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.inter(size: 10, color: Colors.white38),
+                ),
+              ],
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  _PostCountBadge(cat.key, key: ValueKey('count-${cat.key}')),
+                  _statusBadge(cat),
+                ],
               ),
-              tooltip: 'Edit',
-            ),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.delete_outline,
-                  color: Colors.redAccent, size: 18),
-              onPressed: () => _confirmDelete(context, cat),
-              tooltip: 'Delete',
-            ),
-          ],
+            ],
+          ),
         ),
-      );
-
+        const SizedBox(width: 4),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(
+            Icons.folder_open_outlined,
+            color: AppTheme.orange,
+            size: 18,
+          ),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CategoryContentScreen(category: cat),
+            ),
+          ),
+          tooltip: 'View Content',
+        ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.edit_outlined, color: AppTheme.cyan, size: 18),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CategoryFormScreen(existing: cat),
+            ),
+          ),
+          tooltip: 'Edit',
+        ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(
+            Icons.delete_outline,
+            color: Colors.redAccent,
+            size: 18,
+          ),
+          onPressed: () => _confirmDelete(context, cat),
+          tooltip: 'Delete',
+        ),
+      ],
+    ),
+  );
 
   Widget _thumb(AppCategory cat, {double size = 44}) {
     if (cat.imageUrl != null && cat.imageUrl!.isNotEmpty) {
@@ -325,42 +358,45 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
   }
 
   Widget _thumbFallback(double size) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: AppTheme.orange.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        alignment: Alignment.center,
-        child: Icon(Icons.category_outlined,
-            color: AppTheme.orange, size: size * 0.45),
-      );
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      color: AppTheme.orange.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    alignment: Alignment.center,
+    child: Icon(
+      Icons.category_outlined,
+      color: AppTheme.orange,
+      size: size * 0.45,
+    ),
+  );
 
   Widget _statusBadge(AppCategory cat) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        decoration: BoxDecoration(
-          color: cat.isActive
-              ? Colors.green.withValues(alpha: 0.15)
-              : Colors.redAccent.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: cat.isActive ? Colors.green : Colors.redAccent,
-            width: 0.5,
-          ),
-        ),
-        child: Text(
-          cat.isActive ? 'Active' : 'Inactive',
-          style: AppTheme.inter(
-            size: 9,
-            color: cat.isActive ? Colors.green : Colors.redAccent,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    decoration: BoxDecoration(
+      color: cat.isActive
+          ? Colors.green.withValues(alpha: 0.15)
+          : Colors.redAccent.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(
+        color: cat.isActive ? Colors.green : Colors.redAccent,
+        width: 0.5,
+      ),
+    ),
+    child: Text(
+      cat.isActive ? 'Active' : 'Inactive',
+      style: AppTheme.inter(
+        size: 9,
+        color: cat.isActive ? Colors.green : Colors.redAccent,
+      ),
+    ),
+  );
 
   Future<void> _confirmDelete(BuildContext _, AppCategory cat) async {
-    // The screen's own context: a row's context can be rebuilt away while
-    // the usage check runs, which made the delete silently do nothing.
-    final messenger = ScaffoldMessenger.of(context);
+    
+    final messenger = ScaffoldMessenger.of
+    (context);
     void show(String msg) => messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(msg)));
@@ -370,7 +406,9 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
       usage = await CategoryService.instance.checkUsage(cat.key);
     } catch (e) {
       debugPrint('Category usage check failed: $e');
-      show('Could not check this category. Check your connection and try again.');
+      show(
+        'Could not check this category. Check your connection and try again.',
+      );
       return;
     }
     if (!mounted) return;
@@ -380,34 +418,40 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
     final fandomLine = fandomCount == 0
         ? ''
         : '$fandomCount active fandom${fandomCount == 1 ? '' : 's'} use${fandomCount == 1 ? 's' : ''} '
-            'this category. ${fandomCount == 1 ? 'It' : 'They'} will be deactivated '
-            '(hidden from fans, restorable in Fandoms).\n\n';
+              'this category. ${fandomCount == 1 ? 'It' : 'They'} will be deactivated '
+              '(hidden from fans, restorable in Fandoms).\n\n';
     final refLine = usedByPosts || usedByMerch
         ? 'Some ${[if (usedByPosts) 'posts', if (usedByMerch) 'merchandise'].join(' and ')} '
-            'still use this category and will show no category.\n\n'
+              'still use this category and will show no category.\n\n'
         : '';
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.card,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Delete "${cat.name}"?',
-            style: AppTheme.orbitron(size: 12, color: Colors.white)),
-        content: Text('$fandomLine${refLine}This cannot be undone.',
-            style: AppTheme.inter(size: 12, color: Colors.grey)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Delete "${cat.name}"?',
+          style: AppTheme.orbitron(size: 12, color: Colors.white),
+        ),
+        content: Text(
+          '$fandomLine${refLine}This cannot be undone.',
+          style: AppTheme.inter(size: 12, color: Colors.grey),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('CANCEL',
-                style: AppTheme.orbitron(size: 9, color: Colors.grey)),
+            child: Text(
+              'CANCEL',
+              style: AppTheme.orbitron(size: 9, color: Colors.grey),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(fandomCount > 0 ? 'DEACTIVATE & DELETE' : 'DELETE',
-                style: AppTheme.orbitron(
-                    size: 9, color: Colors.redAccent)),
+            child: Text(
+              fandomCount > 0 ? 'DEACTIVATE & DELETE' : 'DELETE',
+              style: AppTheme.orbitron(size: 9, color: Colors.redAccent),
+            ),
           ),
         ],
       ),
@@ -422,7 +466,9 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
       show('"${cat.name}" deleted.');
     } catch (e) {
       debugPrint('Category delete failed: $e');
-      show('Could not delete "${cat.name}". Check your connection and try again.');
+      show(
+        'Could not delete "${cat.name}". Check your connection and try again.',
+      );
     }
   }
 }
@@ -438,24 +484,35 @@ class _PostCountBadge extends StatefulWidget {
 }
 
 class _PostCountBadgeState extends State<_PostCountBadge> {
-  late final Stream<int> _count = CategoryService.instance.watchPostCount(widget.categoryKey);
+  late final Stream<int> _count = CategoryService.instance.watchPostCount(
+    widget.categoryKey,
+  );
 
   @override
   Widget build(BuildContext context) => StreamBuilder<int>(
-        stream: _count,
-        builder: (context, snap) {
-          final count = snap.data ?? 0;
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            margin: const EdgeInsets.only(right: 4),
-            decoration: BoxDecoration(
-              color: AppTheme.cyan.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.4)),
-            ),
-            child: Text('$count post${count == 1 ? '' : 's'}',
-                style: AppTheme.inter(size: 9, color: AppTheme.cyan)),
-          );
-        },
+    stream: _count,
+    builder: (context, snap) {
+      final count = snap.data ?? 0;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        margin: const EdgeInsets.only(right: 4),
+
+        decoration: BoxDecoration(
+
+          color: AppTheme.cyan.withValues(alpha: 0.12),
+
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.4)),
+        ),
+
+        child: Text(
+          '$count post${count == 1 ? '' : 's'}',
+          style: AppTheme.inter(size: 9, color: AppTheme.cyan),
+        ),
       );
+    },
+  );
 }
+
+
+// code by rafeeq and just commit 

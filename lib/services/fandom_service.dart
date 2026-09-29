@@ -67,15 +67,6 @@ class FandomService {
   @visibleForTesting
   static void resetSessionViews() => _viewedThisSession.clear();
 
-  // Fandom page view (signed-in fans; the caller checks). Counted at most
-  // once per fandom per app session. One transaction:
-  //  - Week reset: if the stored weekKey is the current ISO week, the
-  //    weekly view counter goes up by 1. Otherwise the stored weekly
-  //    numbers belong to an older week, so this view starts a fresh week:
-  //    weekViewCount = 1, weekFollowCount = 0, weekKey = this week.
-  //  - The all-time viewCount goes up by 1 either way.
-  // Increments use FieldValue.increment so concurrent fans each add
-  // exactly 1, which is what the fandoms rule allows.
   Future<void> recordView(String fandomId) async {
     if (!_viewedThisSession.add(fandomId)) return;
     final ref = _col.doc(fandomId);
@@ -125,19 +116,14 @@ class FandomService {
 
   static const int maxFollowed = 30;
 
-  // Follow / unfollow run as ONE transaction over both documents: the fan's
-  // users/{uid}.followedFandomIds and the fandom's followerCount always
-  // change together or not at all. The transaction reads the fan's list
-  // first, so a repeat follow (double tap, second device) or an unfollow of
-  // something not followed is a no-op that never touches the count. The
-  // count moves with FieldValue.increment(±1) rather than a computed value:
-  // the server applies it to whatever is stored at commit time, which is
-  // exactly the "+1 or -1 from the stored value" the security rule checks,
-  // so concurrent fans can never be rejected for a stale count.
+// follow and unfollow kar na ka kaam
+
   Future<void> follow(String uid, String fandomId) {
+
     final db = FirestoreDb.instance;
     final userRef = db.collection('users').doc(uid);
     final fandomRef = _col.doc(fandomId);
+    
     return db.runTransaction((tx) async {
       final user = await tx.get(userRef);
       final fandom = await tx.get(fandomRef);
@@ -153,9 +139,8 @@ class FandomService {
       tx.update(userRef, {
         'followedFandomIds': FieldValue.arrayUnion([fandomId]),
       });
-      // Trending: a follow also counts toward this week, with the same
-      // week-reset rule as page views — same week: weekFollowCount + 1;
-      // older (or missing) week: start this week at 1 follow, 0 views.
+
+    //  folow and unflow work 
       final week = isoWeekKey(DateTime.now());
       tx.update(fandomRef, {
         'followerCount': FieldValue.increment(1),
@@ -184,14 +169,13 @@ class FandomService {
       final data = fandom.data();
       final count = data?['followerCount'];
       final weekFollows = data?['weekFollowCount'];
-      // Unfollow takes back this week's follow point only when that point
-      // was earned THIS week (weekKey is current) and is still above 0, so
-      // following and unfollowing repeatedly nets to zero and can never
-      // push the weekly score up — or below 0.
+  
       final undoWeekFollow = data?['weekKey'] == isoWeekKey(DateTime.now()) &&
           weekFollows is num &&
           weekFollows > 0;
+
       final changes = <String, Object>{
+
         if (count is num && count > 0) 'followerCount': FieldValue.increment(-1),
         if (undoWeekFollow) 'weekFollowCount': FieldValue.increment(-1),
       };
@@ -259,12 +243,14 @@ class FandomService {
     final data = fandom.copyWith(name: name).toMap()
       ..remove('followerCount')
       ..remove('createdAt')
+
       ..remove('viewCount')
       ..remove('weekViewCount')
       ..remove('weekFollowCount')
       ..remove('weekKey');
     final before = await getById(fandom.id);
     final renamed = before != null && before.name != name;
+
     final moved = before != null && before.categoryId != fandom.categoryId;
 
     final db = FirestoreDb.instance;
@@ -277,12 +263,10 @@ class FandomService {
           .get();
       for (final p in posts.docs) {
         batch.update(p.reference, {
-          // Fandom renamed: copy the new name into the denormalized
-          // fandomName of every post in this fandom, in the same batch as
-          // the fandom itself.
+  
+  
           if (renamed) 'fandomName': name,
-          // Fandom moved to another category: move its posts too, so every
-          // category-based query (Home, Explore, Category Detail) follows it.
+         
           if (moved) 'category': fandom.categoryId,
         });
       }

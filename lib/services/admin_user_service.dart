@@ -12,8 +12,7 @@ class AdminUserException implements Exception {
   String toString() => message;
 }
 
-/// Admin "Add user": creates a real Firebase Auth account plus its user
-/// document, without signing the admin out.
+
 class AdminUserService {
   static final AdminUserService instance = AdminUserService._();
   AdminUserService._();
@@ -24,19 +23,8 @@ class AdminUserService {
     required String password,
     required String role,
   }) async {
-    // Temporary Firebase app lifecycle:
-    //  1. createUserWithEmailAndPassword signs the NEW account in on whatever
-    //     FirebaseAuth instance it runs on, so it can't run on the main one
-    //     (that would replace the admin's session). A second app instance,
-    //     with its own name but the same project options, gets its own
-    //     separate FirebaseAuth.
-    //  2. The account is created on that second instance; the admin stays
-    //     signed in on the main app.
-    //  3. The user document is written with the MAIN Firestore instance, so
-    //     the write runs as the admin (the rules allow admins to create any
-    //     user document).
-    //  4. Finally (success or error) the second instance is signed out and
-    //     the temporary app is deleted, so nothing is left behind.
+  //  firebasse ka sath wala code 
+
     final app = await Firebase.initializeApp(
       name: 'admin-create-user-${DateTime.now().microsecondsSinceEpoch}',
       options: DefaultFirebaseOptions.currentPlatform,

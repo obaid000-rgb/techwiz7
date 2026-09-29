@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/app_category.dart';
 
-/// Picks a representative icon for a category from its key/name keywords.
-/// Shared by onboarding and the Profile "My Fandoms" card.
+
 IconData categoryIcon(AppCategory c) {
   final s = '${c.key} ${c.name}'.toLowerCase();
   if (s.contains('anime') || s.contains('amine') || s.contains('manga')) {

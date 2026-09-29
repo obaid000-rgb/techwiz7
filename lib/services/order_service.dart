@@ -11,8 +11,7 @@ class OrderService {
   CollectionReference<Map<String, dynamic>> get _orders =>
       FirestoreDb.instance.collection('orders');
 
-  /// Creates the order from the cart lines exactly as shown at checkout, and
-  /// empties the cart in the same atomic batch. Returns the new order id.
+
   Future<String> placeOrder(String uid, List<CartItem> cart) async {
     if (cart.isEmpty) throw StateError('Cart is empty');
     final items = cart
@@ -47,16 +46,14 @@ class OrderService {
       .snapshots()
       .map((d) => d.exists ? OrderModel.fromMap(d.data()!, d.id) : null);
 
-  /// The signed-in user's own orders, newest first. Filtered by userId (the
-  /// rules only allow reading your own orders) and sorted on-device, which
-  /// avoids needing a composite index.
+
   Stream<List<OrderModel>> watchUserOrders(String uid) => _orders
       .where('userId', isEqualTo: uid)
       .snapshots()
       .map((s) => s.docs.map((d) => OrderModel.fromMap(d.data(), d.id)).toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
 
-  /// Admin only: every order across all users, newest first.
+
   Stream<List<OrderModel>> watchAllOrders() => _orders
       .orderBy('createdAt', descending: true)
       .snapshots()

@@ -1,10 +1,60 @@
 import 'package:fandom_verse/models/faq.dart';
 import 'package:fandom_verse/models/glossary_term.dart';
 import 'package:fandom_verse/services/chatbot/ai_actions.dart';
+import 'package:fandom_verse/services/chatbot/ai_context_builder.dart';
+import 'package:fandom_verse/services/chatbot/ai_request_context.dart';
 import 'package:fandom_verse/services/chatbot/local_answerer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('per-question context', () {
+    final entries = [
+      AiEntry('event', '- e1 | Karachi Comic Con | Convention | Karachi', 'Karachi Comic Con', 'Karachi Expo'),
+      AiEntry('event', '- e2 | Lahore Gaming Fest | Convention | Lahore', 'Lahore Gaming Fest', 'Lahore Expo'),
+      for (var i = 0; i < 60; i++)
+        AiEntry('product', '- p$i | Naruto Hoodie $i | \$${20 + i}', 'Naruto Hoodie $i', 'Naruto', price: 20.0 + i),
+      for (var i = 0; i < 200; i++)
+        AiEntry('glossary', '- Term$i | Anime | A fan word number $i.', 'Term$i', 'Anime'),
+      AiEntry('glossary', '- Shipping | Anime | Wanting two characters together.', 'Shipping', 'Anime'),
+    ];
+    AiContext ctx({bool signedIn = true}) => AiContext(
+          builtAt: DateTime(2026, 9, 29),
+          uid: signedIn ? 'u1' : null,
+          signedIn: signedIn,
+          account: signedIn ? 'Level: 2 (Fan), XP: 150' : null,
+          entries: entries,
+        );
+
+    test('only matching content is sent', () {
+      final s = buildRequestInstruction(ctx(), 'What events are in Karachi this week?');
+      expect(s, contains('Karachi Comic Con'));
+      expect(s, isNot(contains('Lahore Gaming Fest')));
+      expect(s, isNot(contains('Naruto Hoodie')));
+      expect(s, isNot(contains('Term5 |')));
+    });
+
+    test('a follow-up keeps the earlier subject', () {
+      final s = buildRequestInstruction(ctx(), 'Which one is cheapest?',
+          recent: ['What events are in Karachi this week?']);
+      expect(s, contains('Karachi Comic Con'));
+    });
+
+    test('account data only for questions about the account', () {
+      expect(buildRequestInstruction(ctx(), 'What level am I?'), contains('XP: 150'));
+      final other = buildRequestInstruction(ctx(), 'What does shipping mean?');
+      expect(other, isNot(contains('XP: 150')));
+      expect(other, contains('Wanting two characters together'));
+      expect(buildRequestInstruction(ctx(signedIn: false), 'What level am I?'), contains('GUEST'));
+    });
+
+    test('cheap shop questions get the cheapest products, within the size limit', () {
+      final s = buildRequestInstruction(ctx(), 'show me cheap merch');
+      expect(s, contains('Naruto Hoodie 0 |'));
+      expect(s, isNot(contains('Naruto Hoodie 59 |')));
+      expect(s.length, lessThanOrEqualTo(kMaxInstructionChars));
+    });
+  });
+
   group('action tags', () {
     const known = {'fandom:naruto': 'Open Naruto', 'event:ev1': 'Open Lahore Comic Con'};
     String? labelFor(String kind, String id) => known['$kind:$id'];

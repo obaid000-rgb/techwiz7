@@ -5,6 +5,8 @@ import '../../models/post.dart';
 import '../../services/creator_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/levels.dart';
+import '../../widgets/deep_dive_lock.dart';
 import '../../widgets/creator_widgets.dart';
 import '../../widgets/lore_card.dart';
 import '../../widgets/trending_badge.dart';
@@ -107,7 +109,7 @@ class _LoreTabState extends State<LoreTab> {
                     () => _push(const BeginnerFanHubScreen())),
                 _tile(Icons.scuba_diving_outlined, AppTheme.accent, 'Deep Dive',
                     'Trivia, theories and interviews',
-                    label(count((p) => p.contentDepth == 'deep'), 'post'),
+                    label(count(isDeepDive), 'post'),
                     () => _push(const DeepDiveScreen())),
                 _tile(Icons.menu_book_outlined, AppTheme.orange, 'Glossary',
                     'Fan words explained simply', '',
@@ -193,9 +195,7 @@ class _LoreTabState extends State<LoreTab> {
                       Text(post.title,
                           style: AppTheme.inter(size: 17, weight: FontWeight.w700, height: 1.3)),
                       const SizedBox(height: 6),
-                      Text(post.content,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                      PostExcerpt(post: post,
                           style: AppTheme.inter(size: 13, color: AppTheme.textSecondary, height: 1.5)),
                       const SizedBox(height: 14),
                       SizedBox(

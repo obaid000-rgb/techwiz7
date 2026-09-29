@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/team_member.dart';
 import 'firestore_db.dart';
 
-/// About Us "Meet the Team", managed by admin in the `teamMembers` collection.
 class TeamService {
   static final TeamService instance = TeamService._();
   TeamService._();

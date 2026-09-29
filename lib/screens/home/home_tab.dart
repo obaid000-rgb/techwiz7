@@ -9,6 +9,7 @@ import '../../services/event_service.dart';
 import '../../services/first_run_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/levels.dart';
 import '../../widgets/bookmark_button.dart';
 import 'widgets/fandom_heart_button.dart';
 import '../../widgets/lore_card.dart';
@@ -481,6 +482,10 @@ class _HomeTabState extends State<HomeTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       TrendingBadge(postId: post.id, margin: const EdgeInsets.only(bottom: 6)),
+                      if (isDeepDive(post))
+                        const Padding(
+                            padding: EdgeInsets.only(bottom: 6),
+                            child: Align(alignment: Alignment.centerLeft, child: DeepDiveLockBadge())),
                       Text(
                         fandomName.isEmpty ? level : '$fandomName · $level',
                         maxLines: 1,

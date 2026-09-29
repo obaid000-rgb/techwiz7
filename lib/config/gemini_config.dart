@@ -10,4 +10,8 @@ class GeminiConfig {
   /// it's not available.
   static const String apiKey = String.fromEnvironment('GEMINI_API_KEY');
   static const String model = 'gemini-3.1-flash-lite';
+  /// Tried once only after [model] still fails its automatic retries (e.g.
+  /// repeated 503 "high demand"). Same family, confirmed available on the
+  /// free tier (2026-09-29).
+  static const String fallbackModel = 'gemini-3.5-flash-lite';
 }

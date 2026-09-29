@@ -153,29 +153,38 @@ class _PostsTabState extends State<_PostsTab> {
   }
 }
 
-/// Admin list row for a Post (edit → PostFormScreen, delete with confirm).
-/// Public so other admin screens (e.g. CategoryContentScreen) show the
-/// exact same row.
+
 Widget adminPostRow(BuildContext context, Post post) {
   return _itemCard(
     context,
     icon: Icons.article_outlined,
+
     iconColor: AppTheme.cyan,
+
     title: post.title,
+
     subtitle:
         '${post.category.isEmpty ? 'No category' : post.category}${post.hasFandom ? ' › ${post.fandomName}' : ''}  •  ${_fmtDate(post.createdAt)}',
     badge: post.hasFandom
         ? null
+
         : Container(
+
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               color: AppTheme.orange.withValues(alpha: 0.15),
+
               borderRadius: BorderRadius.circular(6),
+
               border: Border.all(color: AppTheme.orange, width: 0.5),
+
+
             ),
             child: Text(
               'No fandom',
+
               style: AppTheme.inter(size: 9, color: AppTheme.orange),
+
             ),
           ),
     onEdit: () => Navigator.push(
@@ -183,6 +192,7 @@ Widget adminPostRow(BuildContext context, Post post) {
       MaterialPageRoute(builder: (_) => PostFormScreen(existing: post)),
     ),
     onDelete: () => _confirmDelete(
+
       context,
       'Delete "${post.title}"?',
       () => PostService.instance.deletePost(post.id),
@@ -193,29 +203,37 @@ Widget adminPostRow(BuildContext context, Post post) {
 // ── Merchandise tab ───────────────────────────────────────────────────────────
 
 class _MerchandiseTab extends StatelessWidget {
+
   const _MerchandiseTab();
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Merchandise>>(
       stream: MerchandiseService.instance.watchMerchandise(),
-      builder: (context, snapshot) {
+      builder: 
+      (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
+          return const Center
+          (
             child: CircularProgressIndicator(color: AppTheme.orange),
           );
         }
         if (snapshot.hasError) {
-          return _errorView('merchandise', snapshot.error);
+          return _errorView
+          ('merchandise', snapshot.error);
         }
         final items = snapshot.data ?? [];
         return Column(
           children: [
             _sectionHeader(
+
               context,
               'Merchandise',
+
               AppTheme.orange,
+
               () => Navigator.push(
+                
                 context,
                 MaterialPageRoute(
                   builder: (_) => const MerchandiseFormScreen(),
@@ -243,8 +261,7 @@ class _MerchandiseTab extends StatelessWidget {
     );
   }
 }
-
-/// Admin list row for a Merchandise item (edit → MerchandiseFormScreen,
+// admin list row for Merchandise
 /// delete with confirm). Public for reuse, like [adminPostRow].
 Widget adminMerchRow(BuildContext context, Merchandise item) {
   return _itemCard(
@@ -266,23 +283,30 @@ Widget adminMerchRow(BuildContext context, Merchandise item) {
   );
 }
 
-// ── Events section (standalone sidebar entry) ─────────────────────────────────
-
+// bugs fix 
 class EventsSection extends StatelessWidget {
+
   const EventsSection({super.key});
 
   @override
   Widget build(BuildContext context) {
+
     return StreamBuilder<List<EventItem>>(
+
       stream: EventService.instance.watchEvents(),
+
       builder: (context, snapshot) {
+
         if (snapshot.connectionState == ConnectionState.waiting) {
+
           return const Center(
+
             child: CircularProgressIndicator(color: AppTheme.pink),
           );
         }
         if (snapshot.hasError) {
           return _errorView('events', snapshot.error);
+
         }
         final events = snapshot.data ?? [];
         return Column(
@@ -303,11 +327,14 @@ class EventsSection extends StatelessWidget {
                       'Tap ADD to list a convention or event',
                     )
                   : ListView.separated(
+
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 8,
                       ),
+
                       itemCount: events.length,
+
                       separatorBuilder: (context, i) =>
                           const SizedBox(height: 8),
                       itemBuilder: (context, i) =>
@@ -339,38 +366,98 @@ class EventsSection extends StatelessWidget {
         context,
         MaterialPageRoute(builder: (_) => EventFormScreen(existing: event)),
       ),
-      // Events are never hard-deleted: Unpublish hides the event from every
-      // fan screen and keeps it here, where Republish brings it back.
+    // here is event will not hard deleted 
       deleteIcon: event.isPublished
           ? Icons.visibility_off_outlined
+
           : Icons.visibility_outlined,
       deleteTooltip: event.isPublished ? 'Unpublish' : 'Republish',
+
       deleteColor: event.isPublished ? Colors.redAccent : AppTheme.cyan,
+
       onDelete: () => event.isPublished
           ? _confirmUnpublish(context, event)
           : _setPublished(context, event, true),
+      // Unpublish (above) hides an event and can be undone; this removes
+      // it for good.
+      extraAction: IconButton(
+        icon: const Icon(Icons.delete_forever_outlined, color: Colors.redAccent, size: 17),
+        onPressed: () => _confirmDeleteEvent(context, event),
+        tooltip: 'Delete permanently',
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+      ),
     );
+  }
+
+  Future<void> _confirmDeleteEvent(BuildContext context, EventItem event) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Delete "${event.title}" permanently?',
+            style: AppTheme.orbitron(size: 12, color: Colors.white)),
+        content: Text(
+          'This removes the event completely and cannot be undone. '
+          'Fans who saved it will see it as "no longer listed" in My Agenda.\n\n'
+          'To only hide it, use Unpublish instead.',
+          style: AppTheme.inter(size: 12, color: Colors.grey, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('CANCEL', style: AppTheme.inter(size: 12, color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('DELETE FOREVER',
+                style: AppTheme.inter(size: 12, color: Colors.redAccent, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await EventService.instance.deleteEvent(event.id);
+      messenger.showSnackBar(SnackBar(content: Text('"${event.title}" was deleted.')));
+    } catch (e) {
+      debugPrint('Event delete failed: $e');
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Could not delete the event. Check your connection.')));
+    }
   }
 
   Widget _statusBadge(EventItem event) {
     if (!event.isPublished) return _chip('Unpublished', Colors.grey);
+
     return switch (event.statusAt(DateTime.now())) {
+
       EventStatus.upcoming => _chip('Upcoming', AppTheme.cyan),
+
       EventStatus.happeningNow => _chip('Happening now', Colors.greenAccent),
+
       EventStatus.ended => _chip('Ended', Colors.redAccent),
     };
   }
 
   Widget _chip(String label, Color color, {IconData? icon}) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(6),
+          
           border: Border.all(color: color.withValues(alpha: 0.5)),
+
         ),
+        // got error fix by rafeeq code by aqsa 
         child: Row(
           mainAxisSize: MainAxisSize.min,
+
           children: [
+
             if (icon != null) ...[
               Icon(icon, color: color, size: 11),
               const SizedBox(width: 3),
@@ -385,13 +472,18 @@ class EventsSection extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+
         backgroundColor: AppTheme.card,
+
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+
         title: Text('Unpublish "${event.title}"?',
             style: AppTheme.orbitron(size: 12, color: Colors.white)),
+
         content: Text(
           'Fans will no longer see it on Events, Home or its fandoms. '
           'It stays in this list and you can republish it any time.',
+
           style: AppTheme.inter(size: 12, color: Colors.grey),
         ),
         actions: [
@@ -403,6 +495,7 @@ class EventsSection extends StatelessWidget {
             onPressed: () => Navigator.pop(ctx, true),
             child: Text('UNPUBLISH',
                 style: AppTheme.inter(
+
                     size: 12, color: Colors.redAccent, weight: FontWeight.w700)),
           ),
         ],
@@ -416,9 +509,11 @@ class EventsSection extends StatelessWidget {
       await EventService.instance.setPublished(event.id, published);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          
           content: Text(published
               ? '"${event.title}" is published again.'
               : '"${event.title}" is unpublished.'),
+
         ));
       }
     } catch (e) {
@@ -432,31 +527,44 @@ class EventsSection extends StatelessWidget {
   }
 }
 
-// ── Shared helpers ────────────────────────────────────────────────────────────
+// helper 
 
 Widget _sectionHeader(
   BuildContext context,
   String title,
   Color accentColor,
+
   VoidCallback onAdd,
+
 ) => Padding(
   padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+
   child: Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
       Text(title, style: AppTheme.orbitron(size: 12, color: accentColor)),
+
       ElevatedButton.icon(
         onPressed: onAdd,
+
         style: ElevatedButton.styleFrom(
+
           backgroundColor: accentColor,
+
           foregroundColor: Colors.white,
+
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+
           shape: RoundedRectangleBorder(
+
             borderRadius: BorderRadius.circular(10),
+
           ),
         ),
         icon: const Icon(Icons.add, size: 15),
+
         label: Text('ADD', style: AppTheme.orbitron(size: 9)),
+
       ),
     ],
   ),
@@ -471,18 +579,26 @@ Widget _itemCard(
   required VoidCallback onEdit,
   required VoidCallback onDelete,
   Widget? badge,
-  // Optional line under the subtitle (an event's type and status).
+
   Widget? footer,
-  // The right-hand action is Delete unless a caller swaps it (events use
-  // Unpublish / Republish instead).
+
   IconData deleteIcon = Icons.delete_outline,
   String deleteTooltip = 'Delete',
+
   Color deleteColor = Colors.redAccent,
+
+  // An extra button after the delete/unpublish one (events: delete forever).
+  Widget? extraAction,
+
 }) => Container(
   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
   decoration: BoxDecoration(
+
+
     color: AppTheme.card,
+
     borderRadius: BorderRadius.circular(12),
+
     border: Border.all(color: AppTheme.border),
   ),
   child: Row(
@@ -490,8 +606,11 @@ Widget _itemCard(
       Container(
         padding: const EdgeInsets.all(7),
         decoration: BoxDecoration(
+
           color: iconColor.withValues(alpha: 0.12),
+
           borderRadius: BorderRadius.circular(8),
+
         ),
         child: Icon(icon, color: iconColor, size: 18),
       ),
@@ -504,9 +623,12 @@ Widget _itemCard(
               children: [
                 Flexible(
                   child: Text(
+
                     title,
                     maxLines: 1,
+
                     overflow: TextOverflow.ellipsis,
+
                     style: AppTheme.inter(size: 13, weight: FontWeight.w600),
                   ),
                 ),
@@ -514,9 +636,12 @@ Widget _itemCard(
               ],
             ),
             const SizedBox(height: 3),
+
             Text(
               subtitle,
+
               maxLines: 1,
+
               overflow: TextOverflow.ellipsis,
               style: AppTheme.inter(size: 10, color: Colors.grey),
             ),
@@ -528,27 +653,37 @@ Widget _itemCard(
         icon: const Icon(Icons.edit_outlined, color: AppTheme.cyan, size: 17),
         onPressed: onEdit,
         tooltip: 'Edit',
+
         padding: EdgeInsets.zero,
+
         constraints: const BoxConstraints(),
       ),
       const SizedBox(width: 4),
+
       IconButton(
+
         icon: Icon(deleteIcon, color: deleteColor, size: 17),
         onPressed: onDelete,
+
         tooltip: deleteTooltip,
+
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(),
       ),
+      if (extraAction != null) ...[const SizedBox(width: 4), extraAction],
     ],
   ),
 );
 
 Widget _errorView(String what, Object? error) {
   debugPrint('Content moderation ($what) load error: $error');
+
   return Center(
     child: Padding(
+
       padding: const EdgeInsets.all(24),
       child: Text(
+
         'Could not load $what. Check your connection and try again.',
         style: AppTheme.inter(size: 12, color: Colors.redAccent),
         textAlign: TextAlign.center,
@@ -562,9 +697,11 @@ Widget _emptyView(String title, String subtitle) => Center(
     mainAxisAlignment: MainAxisAlignment.center,
     children: [
       const Icon(Icons.inbox_outlined, color: Colors.grey, size: 36),
-      const SizedBox(height: 12),
+      const SizedBox
+      (height: 12),
       Text(title, style: AppTheme.inter(size: 13, color: Colors.grey)),
       const SizedBox(height: 4),
+
       Text(subtitle, style: AppTheme.inter(size: 11, color: Colors.grey)),
     ],
   ),
@@ -575,24 +712,33 @@ String _fmtDate(DateTime d) =>
 
 Future<void> _confirmDelete(
   BuildContext context,
+
   String message,
+
   Future<void> Function() onConfirm,
+
 ) async {
   final confirm = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       backgroundColor: AppTheme.card,
+
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(
         message,
         style: AppTheme.orbitron(size: 12, color: Colors.white),
       ),
       content: Text(
+
         'This cannot be undone.',
+
         style: AppTheme.inter(size: 12, color: Colors.grey),
       ),
+
       actions: [
+
         TextButton(
+
           onPressed: () => Navigator.pop(ctx, false),
           child: Text(
             'CANCEL',
@@ -600,6 +746,7 @@ Future<void> _confirmDelete(
           ),
         ),
         TextButton(
+
           onPressed: () => Navigator.pop(ctx, true),
           child: Text(
             'DELETE',
@@ -610,15 +757,17 @@ Future<void> _confirmDelete(
     ),
   );
   if (confirm != true || !context.mounted) return;
-  // Captured before the await: the row's context may be gone afterwards.
   final messenger = ScaffoldMessenger.of(context);
   try {
     await onConfirm();
   } catch (e) {
     debugPrint('Delete failed: $e');
     messenger
+
       ..hideCurrentSnackBar()
+
       ..showSnackBar(const SnackBar(
+        
           content: Text('Could not delete. Check your connection.')));
   }
 }

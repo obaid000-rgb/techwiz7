@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../config/app_info.dart';
@@ -192,7 +193,12 @@ class AuthService {
   }
 
   final ValueNotifier<UserData?> userNotifier = ValueNotifier(null);
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  // Created on first use and never on web: the google_sign_in web plugin
+  // needs its own web client id (not configured), and without it the
+  // plugin threw at startup, which paused debug sessions on a white page.
+  // Web signs in with Firebase's Google popup instead (signInWithGoogle).
+  GoogleSignIn? _googleSignInInstance;
+  GoogleSignIn get _googleSignIn => _googleSignInInstance ??= GoogleSignIn();
 
   bool get isLoggedIn => userNotifier.value != null;
   UserData? get currentUser => userNotifier.value;
@@ -435,19 +441,32 @@ class AuthService {
   /// Returns true if signed in, false if the user closed the Google account
   /// picker. Throws on real failures (see LoginScreen for the messages).
   Future<bool> signInWithGoogle() async {
-    final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-    if (googleUser == null) return false; // picker cancelled
-
-    final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-    final OAuthCredential credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
-    );
+    OAuthCredential? credential;
+    if (!kIsWeb) {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return false; // picker cancelled
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+    }
 
     final pending = await FirstRunService.instance.readPending();
     _profileCreationInProgress = true;
     try {
-      final result = await FirebaseAuth.instance.signInWithCredential(credential);
+      final UserCredential result;
+      if (credential != null) {
+        result = await FirebaseAuth.instance.signInWithCredential(credential);
+      } else {
+        // Web: Firebase's own Google popup.
+        try {
+          result = await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'popup-closed-by-user' || e.code == 'cancelled-popup-request') return false;
+          rethrow;
+        }
+      }
       final user = result.user!;
       if (result.additionalUserInfo?.isNewUser ?? false) {
         // First Google sign-in = registration: create the profile like
@@ -521,7 +540,7 @@ class AuthService {
     // Google sign-out can throw (e.g. no Google session, or web without a
     // Google client id); it must never block logging out of the app.
     try {
-      await _googleSignIn.signOut();
+      if (!kIsWeb) await _googleSignIn.signOut();
     } catch (_) {}
     await FirebaseAuth.instance.signOut();
   }

@@ -18,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passController = TextEditingController();
+  bool _hidePassword = true;
   bool _loading = false;
   bool _submitted = false;
   String? _errorMessage;
@@ -195,13 +196,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _passController,
-                        obscureText: true,
+                        obscureText: _hidePassword,
                         validator: Validators.validateLoginPassword,
                         style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           prefixIcon:
-                              Icon(Icons.lock_outline, color: Colors.grey),
+                              const Icon(Icons.lock_outline, color: Colors.grey),
                           hintText: 'Password',
+                          suffixIcon: IconButton(
+                            tooltip: _hidePassword ? 'Show password' : 'Hide password',
+                            icon: Icon(
+                                _hidePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                color: Colors.grey),
+                            onPressed: () => setState(() => _hidePassword = !_hidePassword),
+                          ),
                         ),
                       ),
                       Align(

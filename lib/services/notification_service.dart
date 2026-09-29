@@ -12,16 +12,13 @@ const String kAnnouncementsTopic = 'announcements';
 const String kAnnouncementsChannelId = 'announcements';
 const String kPriceAlertsChannelId = 'price_alerts';
 
-/// Push is only wired up for Android (and iOS if it's ever added). Web needs a
-/// service worker + VAPID key and doesn't support topics; Windows has no FCM.
+
 bool get pushSupported =>
     !kIsWeb &&
     (defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS);
 
-/// Registered in main.dart. Runs in its own isolate while the app is in the
-/// background or terminated; the OS shows the notification itself, so this
-/// only records it in history.
+
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await NotificationService.instance.saveMessage(message);
@@ -74,15 +71,13 @@ class NotificationService {
   Future<void>? _hiveReady;
   bool _initialized = false;
 
-  // History box via IsolatedHive: the background handler writes from another
-  // isolate, and plain Hive boxes corrupt under multi-isolate access.
+
   Future<IsolatedBox<Map>> _box() async {
     _hiveReady ??= IsolatedHive.initFlutter();
     await _hiveReady;
     return IsolatedHive.openBox<Map>(_boxName);
   }
 
-  /// Call once at startup. Safe to call on unsupported platforms (no-op).
   Future<void> init() async {
     if (!pushSupported || _initialized) return;
     _initialized = true;
@@ -122,8 +117,7 @@ class NotificationService {
 
   Future<void>? _localReady;
 
-  /// Local-notification setup only (plugin + channels) — no FCM. Shared by
-  /// [init] and on-device alerts, so price alerts never depend on FCM.
+
   Future<void> _initLocal() => _localReady ??= _doInitLocal();
 
   Future<void> _doInitLocal() async {
@@ -139,9 +133,7 @@ class NotificationService {
       onDidReceiveNotificationResponse: (_) => openNotificationsScreen(),
     );
 
-    // Android 8+ needs the channel to exist before anything can post to it.
-    // Its id matches default_notification_channel_id in AndroidManifest.xml,
-    // so background/terminated FCM notifications land in it too.
+
     await _local
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
@@ -151,8 +143,7 @@ class NotificationService {
           description: 'News and announcements from Fandom Verse',
           importance: Importance.high,
         ));
-    // Separate channel for on-device wishlist price alerts, so fans can mute
-    // them independently of announcements in system settings.
+
     await _local
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
@@ -164,7 +155,6 @@ class NotificationService {
         ));
   }
 
-  /// True if the app was cold-started by tapping a notification.
   Future<bool> launchedFromNotification() async {
     if (!pushSupported) return false;
     final initial = await FirebaseMessaging.instance.getInitialMessage();
@@ -182,17 +172,12 @@ class NotificationService {
     );
   }
 
-  /// Posts an on-device notification for a wishlist price change — purely
-  /// local (flutter_local_notifications), no FCM involved. Also recorded in
-  /// the in-app notification history. [productId] keys the notification so
-  /// each product gets its own entry (and a newer change for the same
-  /// product replaces the older one instead of stacking).
+
   Future<void> showPriceAlert({
     required String productId,
     required String title,
     required String body,
   }) async {
-    // History is best-effort: a storage hiccup must not block the alert.
     try {
       await saveLocal(
         id: 'price-$productId-${DateTime.now().millisecondsSinceEpoch}',
@@ -275,8 +260,7 @@ class NotificationService {
         settings.authorizationStatus == AuthorizationStatus.provisional;
   }
 
-  /// Shows the explainer, then the OS prompt (FCM's requestPermission covers
-  /// both iOS and Android 13+'s POST_NOTIFICATIONS). Returns true if granted.
+
   Future<bool> requestPermissionWithExplainer(BuildContext context) async {
     if (!pushSupported) return false;
     if (await isPermissionGranted()) return true;

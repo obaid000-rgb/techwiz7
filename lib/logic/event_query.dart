@@ -158,13 +158,13 @@ List<EventMatch> applyEventFilter(
   DateTime now,
 ) {
   final bounds = dateRangeBounds(filter.dateRange, now);
-  final cities = {for (final c in filter.cities) c.trim().toLowerCase()};
+  final cities = {for (final c in filter.cities) normalizeCity(c)};
   final followed = followedFandomIds.toSet();
   final out = <EventMatch>[];
   for (final e in events) {
     if (!e.isVisibleToFans(now)) continue;
     if (filter.types.isNotEmpty && !filter.types.contains(e.type)) continue;
-    if (cities.isNotEmpty && !cities.contains(e.city.trim().toLowerCase())) continue;
+    if (cities.isNotEmpty && !cities.contains(normalizeCity(e.city))) continue;
     if (bounds != null && !overlapsRange(e, bounds.$1, bounds.$2)) continue;
     if (!matchesQuery(e, filter.query)) continue;
     if (filter.myFandomsOnly && !e.fandomIds.any(followed.contains)) continue;
@@ -187,14 +187,66 @@ List<EventMatch> applyEventFilter(
 }
 
 /// Distinct city names among events fans can still see (not ended, not
-/// unpublished), case-insensitive with the first spelling kept, sorted.
+/// unpublished), matched with [normalizeCity] ("Karachi Division" and
+/// "karachi " are one city) and shown with [displayCity], sorted.
 List<String> availableCities(List<EventItem> events, [DateTime? now]) {
   final at = now ?? DateTime.now();
   final byKey = <String, String>{};
   for (final e in events) {
-    final name = e.city.trim();
+    final name = displayCity(e.city);
     if (name.isEmpty || !e.isVisibleToFans(at)) continue;
-    byKey.putIfAbsent(name.toLowerCase(), () => name);
+    byKey.putIfAbsent(normalizeCity(name), () => name);
   }
   return byKey.values.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 }
+
+// ── City names ────────────────────────────────────────────────────────────
+// The admin form fills City from the map pin (OpenStreetMap), which returns
+// region names like "Karachi Division", while a fan's detected city is
+// "Karachi" and typed ones vary ("karachi ", "Karachi City"). Cities are
+// always compared through normalizeCity.
+
+final RegExp _citySuffix =
+    RegExp(r'\s+(division|district|city|metropolitan( city)?|municipality|tehsil)$', caseSensitive: false);
+
+/// [city] without surrounding spaces, doubled spaces or an administrative
+/// suffix ("Karachi Division" → "Karachi"), keeping its capitalisation.
+String displayCity(String city) {
+  final clean = city.trim().replaceAll(RegExp(r'\s+'), ' ');
+  final stripped = clean.replaceFirst(_citySuffix, '');
+  return stripped.isEmpty ? clean : stripped;
+}
+
+/// Comparison key for a city: [displayCity], lower-cased.
+String normalizeCity(String city) => displayCity(city).toLowerCase();
+
+// ── "Near you" ─────────────────────────────────────────────────────────────
+
+/// "Near you" radius (km).
+const double kNearYouKm = 50;
+
+/// The "Near you" row: events within [kNearYouKm] of the fan, or in the
+/// fan's detected city (so events saved without map coordinates still
+/// count), nearest first (events without a distance last, by date).
+/// Only used for this row; it never filters the main list.
+List<EventMatch> nearYouEvents(List<EventMatch> all, String? detectedCity) {
+  final city = detectedCity == null ? null : normalizeCity(detectedCity);
+  final out = [
+    for (final m in all)
+      if ((m.distanceKm != null && m.distanceKm! <= kNearYouKm) ||
+          (city != null && city.isNotEmpty && normalizeCity(m.event.city) == city))
+        m,
+  ];
+  out.sort((a, b) {
+    final da = a.distanceKm, db = b.distanceKm;
+    if (da != null && db != null) return da.compareTo(db);
+    if (da != null) return -1;
+    if (db != null) return 1;
+    return a.event.date.compareTo(b.event.date);
+  });
+  return out;
+}
+
+/// [all] soonest first (for "All upcoming events").
+List<EventMatch> soonestFirst(List<EventMatch> all) =>
+    List.of(all)..sort((a, b) => a.event.date.compareTo(b.event.date));

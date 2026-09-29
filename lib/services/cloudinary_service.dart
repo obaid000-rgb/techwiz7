@@ -60,11 +60,17 @@ class CloudinaryService {
       // Same multipart body, sent through a StreamedRequest so the bytes
       // can be counted on their way out for a progress bar.
       final total = request.contentLength;
+      // finalize() is what adds the "multipart/form-data; boundary=…"
+      // content-type, so it must run BEFORE the headers are copied.
+      // Copying them first sent the body with no content-type, and
+      // Cloudinary rejected every video with 400 "Invalid request
+      // parameters".
+      final body = request.finalize();
       final counted = http.StreamedRequest('POST', request.url)
         ..headers.addAll(request.headers)
         ..contentLength = total;
       var sent = 0;
-      request.finalize().listen(
+      body.listen(
         (chunk) {
           sent += chunk.length;
           if (total > 0) onProgress(sent / total);

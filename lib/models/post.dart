@@ -4,7 +4,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 const List<String> kPostContentTypes = ['News', 'Gallery', 'Video', 'Podcast'];
 
 /// '' = untagged (shows under "All" only, not under either depth filter).
-const List<String> kPostContentDepths = ['beginner', 'deep'];
+const List<String> kPostContentDepths = ['beginner', kDepthDeep];
+
+/// The one value the admin form saves for a Deep Dive post.
+const String kDepthDeep = 'deep';
+
+/// Maps any stored spelling of a depth to 'beginner', 'deep' or ''.
+/// Posts saved by older builds or edited in the console may say "Deep Dive",
+/// "deep_dive", "DeepDive", "Deep" or "expert"; all of them count as Deep
+/// Dive so none of them slips past the lock.
+String normalizeContentDepth(Object? raw) {
+  if (raw is! String) return '';
+  final v = raw.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+  if (v == 'deep' || v == 'deepdive' || v == 'expert' || v == 'advanced') return kDepthDeep;
+  if (v == 'beginner' || v == 'newfan' || v == 'basic') return 'beginner';
+  return '';
+}
 
 /// Deep Dive sub-type, only meaningful when contentDepth == 'deep'.
 /// '' = untyped (shows under Deep Dive's "All" tab only).
@@ -99,9 +114,7 @@ class Post {
     isFandomOfTheDay: map['isFandomOfTheDay'] as bool? ?? false,
     status: (map['status'] as String?) ?? 'active',
     youtubeUrl: map['youtubeUrl'] as String?,
-    contentDepth: kPostContentDepths.contains(map['contentDepth'])
-        ? map['contentDepth'] as String
-        : '',
+    contentDepth: normalizeContentDepth(map['contentDepth']),
     deepDiveType: kDeepDiveTypes.contains(map['deepDiveType'])
         ? map['deepDiveType'] as String
         : '',

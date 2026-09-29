@@ -1,3 +1,5 @@
+import 'package:fandom_verse/models/post.dart';
+import 'package:fandom_verse/services/auth_service.dart';
 import 'package:fandom_verse/utils/levels.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -41,10 +43,28 @@ void main() {
     expect(progressToNextLevel(5000), 1.0);
   });
 
-  test('Deep Dive gate', () {
-    expect(canOpenDeepDive(signedIn: false, isAdmin: false, xp: 9999), isFalse);
-    expect(canOpenDeepDive(signedIn: true, isAdmin: false, xp: 499), isFalse);
-    expect(canOpenDeepDive(signedIn: true, isAdmin: false, xp: 500), isTrue);
-    expect(canOpenDeepDive(signedIn: true, isAdmin: true, xp: 0), isTrue);
+  test('Deep Dive gate: Level 3, admins always, guests never', () {
+    UserData fan(int xp, {String role = 'fan'}) => UserData(uid: 'u', name: 'A', email: 'a@b.c', xp: xp, role: role);
+    expect(DEEP_DIVE_LEVEL, 3);
+    expect(canViewDeepDive(null), isFalse);
+    expect(canViewDeepDive(fan(0)), isFalse); // brand-new account
+    expect(canViewDeepDive(fan(249)), isFalse);
+    expect(canViewDeepDive(fan(250)), isTrue);
+    expect(canViewDeepDive(fan(0, role: 'admin')), isTrue);
+    expect(canViewDeepDive(fan(0, role: '')), isFalse);
+  });
+
+  test('isDeepDive recognizes every stored spelling', () {
+    for (final raw in ['deep', 'Deep', 'Deep Dive', 'deep_dive', 'DeepDive', 'deep-dive', 'expert']) {
+      final post = Post.fromMap({'contentDepth': raw}, 'p');
+      expect(isDeepDive(post), isTrue, reason: raw);
+      expect(post.contentDepth, kDepthDeep, reason: raw);
+    }
+    for (final raw in ['beginner', '', null, 42, 'news']) {
+      expect(isDeepDive(Post.fromMap({'contentDepth': raw}, 'p')), isFalse, reason: '$raw');
+    }
+    final newFan = UserData(uid: 'u', name: 'A', email: 'a@b.c');
+    expect(isDeepDiveLockedFor(Post.fromMap({'contentDepth': 'deep'}, 'p'), newFan), isTrue);
+    expect(isDeepDiveLockedFor(Post.fromMap({'contentDepth': 'beginner'}, 'p'), newFan), isFalse);
   });
 }

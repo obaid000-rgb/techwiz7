@@ -7,8 +7,7 @@ import '../models/order_model.dart';
 const String kStoreName = 'Fandom Verse';
 const String kStoreTagline = 'Official Merchandise Store - Pocket Edition';
 
-/// Builds printable PDF invoices for (simulated) orders. The PDF uses only
-/// the built-in Helvetica font, so text is kept to plain ASCII.
+
 class InvoiceService {
   static final InvoiceService instance = InvoiceService._();
   InvoiceService._();

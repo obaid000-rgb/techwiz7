@@ -72,19 +72,14 @@ enum BookmarkSyncResult { synced, offline }
 
 class _TooLarge implements Exception {}
 
-/// Bookmarks double as offline copies: bookmarking a post saves its text,
-/// cover, gallery images, uploaded clip and podcast audio (under 50 MB) in
-/// the app documents folder, so everything in Saved reads with no internet.
-/// One Hive record per (account, post); each post's files live in their own
-/// folder so removing a bookmark deletes them all at once.
+// bookmarka as a offline 
 class BookmarkStore {
   static const boxName = 'bookmark_copies';
   static const maxAudioBytes = 50 * 1024 * 1024;
   static final BookmarkStore instance = BookmarkStore._();
   BookmarkStore._();
 
-  /// Post ids whose files are downloading right now (bookmark buttons show
-  /// a small progress indicator for these).
+
   final ValueNotifier<Set<String>> downloading = ValueNotifier(const {});
 
   Future<Box> _box() => Hive.openBox(boxName);
@@ -102,7 +97,7 @@ class BookmarkStore {
     return v is Map ? BookmarkCopy.fromMap(v) : null;
   }
 
-  // ── Post <-> plain JSON (Hive can't store Timestamps) ────────────────────
+
 
   static Map<String, dynamic> postToJson(Post p) {
     final m = Map<String, dynamic>.from(p.toMap());
@@ -118,10 +113,9 @@ class BookmarkStore {
     return Post.fromMap(m, m['id'] as String? ?? '');
   }
 
-  // ── Files ────────────────────────────────────────────────────────────────
 
-  /// `<app documents>/bookmark_files/<uid>/<postId>` — the folder Hive itself
-  /// lives in, never the system cache (which Android may clear).
+
+
   Future<Directory> _postDir(String uid, String postId) async {
     final base = File((await _box()).path!).parent.path;
     final sep = Platform.pathSeparator;
@@ -176,9 +170,7 @@ class BookmarkStore {
         if (p.audioUrl.isNotEmpty) p.audioUrl: 'audio${_ext(p.audioUrl)}',
       };
 
-  /// Downloads whatever [copy] is still missing, deletes files for URLs the
-  /// post no longer uses, and stores the result. A file that fails is simply
-  /// left missing and retried at the next sync; the bookmark stays.
+
   Future<BookmarkCopy> _fillFiles(BookmarkCopy copy) async {
     if (kIsWeb) return copy;
     final wanted = _wantedFiles(copy.post);
@@ -222,10 +214,7 @@ class BookmarkStore {
     }
   }
 
-  // ── Bookmark / unbookmark ────────────────────────────────────────────────
 
-  /// Saves the text right away (so Saved shows it at once), then downloads
-  /// its files with [downloading] marking progress.
   Future<void> save(String uid, Post post) async {
     final old = await copy(uid, post.id);
     final base = BookmarkCopy(
@@ -255,20 +244,7 @@ class BookmarkStore {
   static bool _sameContent(Post a, Post b) =>
       jsonEncode(postToJson(a)) == jsonEncode(postToJson(b));
 
-  /// Sync, run on app start (and each sign-in) and whenever Saved opens.
-  /// Posts have no updatedAt, so a change is detected by comparing the
-  /// stored fields with the server's. For every bookmarked id:
-  ///  - the server can't be reached -> stop, keep every copy as it is and
-  ///    report [BookmarkSyncResult.offline];
-  ///  - the post was deleted or set inactive -> keep the copy, mark it
-  ///    "No longer available online";
-  ///  - no local copy yet (bookmarked on another device, or a reinstall) ->
-  ///    download it;
-  ///  - the post changed -> store the new fields and download only files
-  ///    whose URLs changed (old ones are deleted);
-  ///  - otherwise -> just retry any files that failed last time.
-  /// Copies whose ids are no longer bookmarked (removed on another device)
-  /// are deleted with their files.
+
   Future<BookmarkSyncResult> sync(String uid, List<String> bookmarkedIds) async {
     final box = await _box();
     final local = {for (final c in copiesIn(box, uid)) c.post.id: c};
@@ -319,9 +295,7 @@ class BookmarkStore {
     }
   }
 
-  /// Files moved over from the old offline downloads are stored under
-  /// placeholder keys until the real post is known; attach them to its URLs
-  /// so they are kept instead of downloaded again.
+  
   static Map<String, String> _remapMigrated(Map<String, String> files, Post p) {
     final out = Map<String, String>.from(files);
     void attach(String key, String url) {
@@ -335,13 +309,10 @@ class BookmarkStore {
     return out;
   }
 
-  // ── Start-up: migration + first sync ─────────────────────────────────────
 
   bool _started = false;
   String? _syncedUid;
 
-  /// Called once at app start. Runs the one-time migration and a sync for
-  /// the signed-in user, and again whenever a different user signs in.
   void start() {
     if (_started) return;
     _started = true;
@@ -369,18 +340,6 @@ class BookmarkStore {
   static const _migrationFlag = 'offline_downloads_migrated_to_bookmarks';
   static const _oldBoxName = 'offline_posts';
 
-  /// One-time migration from the removed "Save for Offline" feature, run on
-  /// the first launch after the update where someone is signed in:
-  ///  1. every old offline entry's post is added to the signed-in user's
-  ///     bookmarkedPostIds (one Firestore update);
-  ///  2. its text becomes a bookmark copy right away, its downloaded clip and
-  ///     thumbnail files are MOVED into the bookmark folder, and its cover
-  ///     (stored as bytes) is written out as a file, so nothing a fan saved
-  ///     is lost even before the next sync fills in the full post;
-  ///  3. the old Hive box and the old offline_videos folder are deleted and
-  ///     a local flag is set so this never runs again.
-  /// With nobody signed in it does nothing, keeping the old files until the
-  /// next sign-in. Returns the ids it moved.
   Future<List<String>> _migrateOldDownloads(UserData user) async {
     if (kIsWeb) return const [];
     final prefs = await Hive.openBox('app_prefs');
@@ -418,8 +377,7 @@ class BookmarkStore {
         cover = '${dir.path}${sep}cover';
         await File(cover).writeAsBytes(bytes, flush: true);
       }
-      // The old record kept only a few fields; the next sync fills in the
-      // rest and maps these files to the post's real URLs.
+   
       final placeholder = Post(
         id: id,
         title: m['title'] as String? ?? '',

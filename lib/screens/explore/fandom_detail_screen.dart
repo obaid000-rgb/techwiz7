@@ -13,7 +13,7 @@ import '../../utils/youtube_utils.dart';
 import '../../widgets/category_name.dart';
 import '../../widgets/clip_player.dart';
 import '../../widgets/creator_widgets.dart';
-import '../shop/shop_tab.dart' show showGuestLoginSheet;
+import '../../widgets/deep_dive_lock.dart';
 import '../fandoms/fandom_page_screen.dart';
 import 'video_player_screen.dart';
 
@@ -35,12 +35,12 @@ class _FandomDetailScreenState extends State<FandomDetailScreen> {
   @override
   void initState() {
     super.initState();
-    final viewer = AuthService.instance.currentUser;
-    _locked = widget.post.contentDepth == 'deep' &&
-        !canOpenDeepDive(
-            signedIn: viewer != null, isAdmin: viewer?.isAdmin ?? false, xp: viewer?.xp ?? 0);
-    // Locked Deep Dive: nothing below loads — no body, media, video, view
-    // count or XP. Only the title and cover are shown.
+    // Content Detail gate. Every in-app route into a post ends here (fandom
+    // tabs, Home, Resources, Explore, Today's Fandom, Beginner Hub, creator
+    // profiles, Saved, Fan Helper buttons). A Deep Dive post viewed below
+    // Level DEEP_DIVE_LEVEL (or as a guest) shows DeepDiveLockedView, and
+    // nothing below loads: no body, media, video, audio, view count or XP.
+    _locked = isDeepDiveLockedFor(widget.post, AuthService.instance.currentUser);
     if (_locked) {
       // Re-check when the viewer logs in from the lock view (or gains XP):
       // once the post is unlocked, reopen it fresh so everything loads.
@@ -79,9 +79,7 @@ class _FandomDetailScreenState extends State<FandomDetailScreen> {
 
   void _onUserChanged() {
     if (!mounted || _reopened) return;
-    final viewer = AuthService.instance.currentUser;
-    if (viewer == null) return;
-    if (!canOpenDeepDive(signedIn: true, isAdmin: viewer.isAdmin, xp: viewer.xp)) return;
+    if (!canViewDeepDive(AuthService.instance.currentUser)) return;
     _reopened = true;
     AuthService.instance.userNotifier.removeListener(_onUserChanged);
     // Swap this route specifically (the login sheet/screen may still be on
@@ -107,84 +105,13 @@ class _FandomDetailScreenState extends State<FandomDetailScreen> {
   }
 
   Widget _lockedView(Post post) {
-    final viewer = AuthService.instance.currentUser;
     final videoId = post.hasVideo ? extractYoutubeVideoId(post.youtubeUrl!) : null;
     final cover = post.imageUrl.isNotEmpty
         ? post.imageUrl
         : post.hasClip
             ? post.videoThumbnailUrl
             : (videoId != null ? youtubeThumbnailUrl(videoId) : '');
-    return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 220,
-            pinned: true,
-            backgroundColor: AppTheme.card,
-            flexibleSpace: FlexibleSpaceBar(
-              background: cover.isEmpty
-                  ? Container(color: AppTheme.card)
-                  : Image.network(cover,
-                      fit: BoxFit.cover,
-                      errorBuilder: (ctx, e, st) => Container(color: AppTheme.card)),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(post.title,
-                      style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-                  const SizedBox(height: 20),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppTheme.card,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppTheme.orange.withValues(alpha: 0.6)),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.lock_rounded, color: AppTheme.orange, size: 36),
-                        const SizedBox(height: 10),
-                        Text(
-                          viewer == null
-                              ? 'Sign in and reach Level $kDeepDiveLevel to unlock Deep Dive'
-                              : 'Deep Dive unlocks at Level $kDeepDiveLevel. '
-                                  'You need ${xpToLevel(viewer.xp, kDeepDiveLevel)} more XP.',
-                          textAlign: TextAlign.center,
-                          style: AppTheme.inter(
-                              size: 14, color: Colors.white, weight: FontWeight.w600),
-                        ),
-                        if (viewer == null) ...[
-                          const SizedBox(height: 14),
-                          ElevatedButton(
-                            onPressed: () =>
-                                showGuestLoginSheet(context, feature: 'Deep Dive'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.cyan,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: Text('LOG IN',
-                                style: AppTheme.orbitron(
-                                    size: 11, color: Colors.black, weight: FontWeight.w800)),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    return DeepDiveLockedView(post: post, cover: cover.isEmpty ? null : NetworkImage(cover));
   }
 
   @override
@@ -230,7 +157,13 @@ class _FandomDetailScreenState extends State<FandomDetailScreen> {
                   if (post.hasCreator) CreatorByline(creatorId: post.creatorId),
                   if (post.audioUrl.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    _NetworkAudioPlayer(url: post.audioUrl),
+                    // Admins sometimes paste a YouTube link as the podcast
+                    // "audio". The audio player can't stream YouTube, so play
+                    // it in the in-app YouTube player instead.
+                    if (extractYoutubeVideoId(post.audioUrl) case final id?)
+                      _YoutubeEpisodeCard(videoId: id, title: post.title)
+                    else
+                      _NetworkAudioPlayer(url: post.audioUrl),
                   ],
                   const SizedBox(height: 16),
                   Text(
@@ -379,6 +312,55 @@ class _FandomDetailScreenState extends State<FandomDetailScreen> {
   }
 }
 
+/// A podcast episode hosted on YouTube: its thumbnail with a play button;
+/// tapping opens the in-app YouTube player.
+class _YoutubeEpisodeCard extends StatelessWidget {
+  final String videoId;
+  final String title;
+  const _YoutubeEpisodeCard({required this.videoId, required this.title});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => VideoPlayerScreen(videoId: videoId, title: title)),
+          ),
+          child: Row(children: [
+            SizedBox(
+              width: 128,
+              height: 72,
+              child: Stack(fit: StackFit.expand, children: [
+                Image.network(youtubeThumbnailUrl(videoId),
+                    fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: AppTheme.bg)),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), shape: BoxShape.circle),
+                    child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 26),
+                  ),
+                ),
+              ]),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('PODCAST EPISODE',
+                    style: AppTheme.orbitron(size: 9, color: AppTheme.cyan, weight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text('Tap to play', style: AppTheme.inter(size: 13, color: Colors.white, weight: FontWeight.w600)),
+              ]),
+            ),
+            const Icon(Icons.headphones_rounded, color: AppTheme.textMuted, size: 20),
+            const SizedBox(width: 14),
+          ]),
+        ),
+      );
+}
+
 /// Full-screen, pinch-zoomable view of one gallery image.
 class _FullScreenImage extends StatelessWidget {
   final String url;
@@ -487,7 +469,7 @@ class _NetworkAudioPlayerState extends State<_NetworkAudioPlayer> {
                 const Icon(Icons.headset_off_outlined, color: Colors.white38, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text("This audio can't be played right now. Check your connection.",
+                  child: Text("This audio can't be played. The link may not be an audio file, or you may be offline.",
                       style: AppTheme.inter(size: 12, color: Colors.white54)),
                 ),
               ]),

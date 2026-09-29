@@ -155,4 +155,43 @@ void main() {
   test('haversine: Lahore to Karachi is about 1030 km', () {
     expect(haversineKm(31.52, 74.35, 24.86, 67.0), closeTo(1030, 25));
   });
+
+  group('cities and Near you', () {
+    test('city names are normalized', () {
+      expect(normalizeCity(' Karachi Division '), 'karachi');
+      expect(normalizeCity('karachi'), 'karachi');
+      expect(normalizeCity('Karachi City'), 'karachi');
+      expect(displayCity('Karachi Division'), 'Karachi');
+      expect(availableCities([
+        ev('a', start: DateTime(2026, 10, 3), city: 'Karachi Division'),
+        ev('b', start: DateTime(2026, 10, 4), city: 'karachi '),
+        ev('c', start: DateTime(2026, 10, 5), city: 'Lahore'),
+      ], now), ['Karachi', 'Lahore']);
+    });
+
+    test('city filter matches every spelling', () {
+      final events = [
+        ev('a', start: DateTime(2026, 10, 3), city: 'Karachi Division'),
+        ev('b', start: DateTime(2026, 10, 4), city: 'Lahore'),
+      ];
+      expect(ids(applyEventFilter(events, const EventFilter(cities: {'Karachi'}), null, const [], now)), ['a']);
+    });
+
+    test('no filter: every city is listed, even with a location', () {
+      final events = [
+        ev('khi', start: DateTime(2026, 10, 3), city: 'Karachi', lat: 24.86, lng: 67.0),
+        ev('lhr', start: DateTime(2026, 10, 4), city: 'Lahore', lat: 31.52, lng: 74.35),
+        ev('isb', start: DateTime(2026, 10, 5), city: 'Islamabad'),
+      ];
+      const karachiFan = (lat: 24.87, lng: 67.02);
+      final all = applyEventFilter(events, EventFilter.none, karachiFan, const [], now);
+      expect(ids(soonestFirst(all)), ['khi', 'lhr', 'isb']);
+      // Near you: within 50 km or in the fan's city; not Lahore/Islamabad.
+      expect(ids(nearYouEvents(all, 'Karachi Division')), ['khi']);
+      // An event without coordinates still counts when it's in the fan's city.
+      final noCoords = applyEventFilter(
+          [ev('k2', start: DateTime(2026, 10, 6), city: 'karachi')], EventFilter.none, karachiFan, const [], now);
+      expect(ids(nearYouEvents(noCoords, 'Karachi')), ['k2']);
+    });
+  });
 }

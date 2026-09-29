@@ -6,13 +6,12 @@ class PendingSelection {
   const PendingSelection(this.categories, this.badge);
 }
 
-/// On-device first-run state (Hive box `app_prefs`): whether the intro
-/// sequence (slides + interest selection) was completed on this install, and
-/// the interest/badge selection made before any account existed.
+
 class FirstRunService {
   static const String boxName = 'app_prefs';
   static const String _seenKey = 'hasSeenOnboarding';
   static const String _pendingCategoriesKey = 'pendingCategories';
+  
   static const String _pendingBadgeKey = 'pendingBadge';
 
   static final FirstRunService instance = FirstRunService._();

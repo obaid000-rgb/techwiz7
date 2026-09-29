@@ -35,23 +35,12 @@ class _PostFormScreenState extends State<PostFormScreen> {
   String? _youtubeVideoId;
   String? _youtubeFieldError;
 
-  // Video: an uploaded short clip (Cloudinary) or a YouTube link. Shown for
-  // every post type, like the YouTube field was; required for Video posts.
+
   bool _useClip = false;
   String _clipUrl = '';
   String _clipThumbnailUrl = '';
   bool _uploadingClip = false;
   bool get _clipMode => _useClip;
-
-  // Image uploads in flight (cover + gallery); Save waits for them.
-  int _imageUploads = 0;
-  bool get _imageBusy => _imageUploads > 0;
-  void _onImageBusy(bool busy) {
-    if (!mounted) return;
-    setState(() => _imageUploads = busy
-        ? _imageUploads + 1
-        : (_imageUploads > 0 ? _imageUploads - 1 : 0));
-  }
 
   void _setVideoSource(bool clip) {
     if (clip == _useClip) return;
@@ -69,7 +58,11 @@ class _PostFormScreenState extends State<PostFormScreen> {
 
   List<Widget> _videoSourceSection() => [
         const SizedBox(height: 16),
-        _label(_contentType == 'Video' ? 'Video (required for Video)' : 'Video (optional)'),
+        _label(switch (_contentType) {
+          'Video' => 'Video (required for Video)',
+          'Podcast' => 'Video or YouTube (or add an audio URL below)',
+          _ => 'Video (optional)',
+        }),
         SegmentedButton<bool>(
           segments: const [
             ButtonSegment(value: true, icon: Icon(Icons.upload_rounded, size: 16), label: Text('Upload video')),
@@ -81,14 +74,18 @@ class _PostFormScreenState extends State<PostFormScreen> {
         if (_useClip) ...[
           const SizedBox(height: 12),
           VideoUploadField(
+
             initialUrl: _clipUrl,
+
             initialThumbnailUrl: _clipThumbnailUrl,
+
             accentColor: AppTheme.cyan,
             onBusyChanged: (busy) => setState(() => _uploadingClip = busy),
             onUploaded: (v) => setState(() {
               _clipUrl = v.url;
               _clipThumbnailUrl = v.thumbnailUrl;
-              // Duration filled from the clip.
+
+            
               if (v.durationSeconds > 0) _durationCtr.text = _formatDuration(v.durationSeconds);
             }),
           ),
@@ -97,7 +94,10 @@ class _PostFormScreenState extends State<PostFormScreen> {
 
   static const int _maxGalleryImages = 12;
   final _audioCtr = TextEditingController();
+
   final _sourceCtr = TextEditingController();
+
+
   final _durationCtr = TextEditingController();
   List<Creator>? _creators;
   String _creatorId = '';
@@ -107,10 +107,14 @@ class _PostFormScreenState extends State<PostFormScreen> {
   Future<void> _loadResourceOptions() async {
     try {
       final creators = await CreatorService.instance.getAllActive();
+
       final current = widget.existing?.creatorId ?? '';
+
       if (current.isNotEmpty && !creators.any((c) => c.id == current)) {
+
         final c = await CreatorService.instance.getById(current);
         if (c != null) creators.add(c);
+
       }
       if (mounted) setState(() => _creators = creators);
     } catch (e) {
@@ -140,22 +144,34 @@ class _PostFormScreenState extends State<PostFormScreen> {
     final e = widget.existing;
     if (e != null) {
       _creatorId = e.creatorId;
+
       _mediaUrls.addAll(e.mediaUrls);
+
       _audioCtr.text = e.audioUrl;
+
       _sourceCtr.text = e.sourceUrl;
+
       if (e.durationSeconds > 0) {
         _durationCtr.text = _formatDuration(e.durationSeconds);
       }
       _titleCtr.text = e.title;
+
       _contentCtr.text = e.content;
+
       _imageUrl = e.imageUrl;
       _category = e.category.isEmpty ? null : e.category;
+
       _contentType = e.contentType;
+
       _status = e.status;
-      _contentDepth = e.contentDepth;
+      _contentDepth = normalizeContentDepth(e.contentDepth);
+
       _deepDiveType = e.deepDiveType;
+
       _isFandomOfTheDay = e.isFandomOfTheDay;
+
       _youtubeUrlCtr.text = e.youtubeUrl ?? '';
+
       _youtubeVideoId = extractYoutubeVideoId(_youtubeUrlCtr.text);
       _clipUrl = e.videoUrl;
       _clipThumbnailUrl = e.videoThumbnailUrl;
@@ -262,7 +278,6 @@ class _PostFormScreenState extends State<PostFormScreen> {
             ImageUploadField(
               initialUrl: _imageUrl.isEmpty ? null : _imageUrl,
               onUploaded: (url) => setState(() => _imageUrl = url),
-              onBusyChanged: _onImageBusy,
               accentColor: AppTheme.cyan,
             ),
             ..._videoSourceSection(),
@@ -305,9 +320,12 @@ class _PostFormScreenState extends State<PostFormScreen> {
                         ),
                       ),
                     ),
+
                     Container(
                       padding: const EdgeInsets.all(10),
+
                       decoration: BoxDecoration(
+
                         color: Colors.black.withValues(alpha: 0.55),
                         shape: BoxShape.circle,
                       ),
@@ -346,9 +364,9 @@ class _PostFormScreenState extends State<PostFormScreen> {
             _dropdown(_contentDepth, const [
               DropdownMenuItem(value: '', child: Text('Unset')),
               DropdownMenuItem(value: 'beginner', child: Text('Beginner')),
-              DropdownMenuItem(value: 'deep', child: Text('Deep Dive')),
+              DropdownMenuItem(value: kDepthDeep, child: Text('Deep Dive')),
             ], (val) => setState(() => _contentDepth = val ?? _contentDepth)),
-            if (_contentDepth == 'deep') ...[
+            if (_contentDepth == kDepthDeep) ...[
               const SizedBox(height: 16),
               _label(
                 'Deep Dive type (Trivia / Advanced Lore / Interviews tab)',
@@ -368,16 +386,10 @@ class _PostFormScreenState extends State<PostFormScreen> {
             const SizedBox(height: 16),
             _todaysFandomToggle(),
             const SizedBox(height: 28),
-            if (_imageBusy)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text('Wait for the image to finish uploading',
-                    style: AppTheme.inter(size: 11, color: Colors.grey)),
-              ),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _saving || _uploadingClip || _imageBusy ? null : _save,
+                onPressed: _saving || _uploadingClip ? null : _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.cyan,
                   foregroundColor: Colors.black,
@@ -436,7 +448,9 @@ class _PostFormScreenState extends State<PostFormScreen> {
   List<Widget> _typeSpecificFields() {
     switch (_contentType) {
       case 'Video':
+
         return [
+
           const SizedBox(height: 16),
           _label('Duration (optional, mm:ss)'),
           _textField(_durationCtr, hint: '12:30'),
@@ -444,12 +458,13 @@ class _PostFormScreenState extends State<PostFormScreen> {
       case 'Podcast':
         return [
           const SizedBox(height: 16),
-          _label('Audio URL (required, https://)'),
+          _label('Audio URL (optional if you add a YouTube link or video above)'),
           _textField(_audioCtr,
-              hint: 'https://…/episode.mp3', keyboardType: TextInputType.url),
+              hint: 'https://…/episode.mp3 or a YouTube link', keyboardType: TextInputType.url),
           const SizedBox(height: 16),
           _label('Duration (optional, mm:ss)'),
           _textField(_durationCtr, hint: '45:00'),
+
         ];
       case 'News':
         return [
@@ -527,7 +542,6 @@ class _PostFormScreenState extends State<PostFormScreen> {
               key: ValueKey('gallery-$_galleryUploaderKey'),
               height: 110,
               accentColor: AppTheme.cyan,
-              onBusyChanged: _onImageBusy,
               onUploaded: (url) => setState(() {
                 if (_mediaUrls.length < _maxGalleryImages) _mediaUrls.add(url);
                 _galleryUploaderKey++;
@@ -645,10 +659,6 @@ class _PostFormScreenState extends State<PostFormScreen> {
       setState(() => _error = 'Wait for the video upload to finish.');
       return;
     }
-    if (_imageBusy) {
-      setState(() => _error = 'Wait for the image to finish uploading.');
-      return;
-    }
     if (_contentType == 'Video' && _clipMode && _clipUrl.isEmpty) {
       setState(() => _error = 'A video is required for Video posts: upload one or switch to a YouTube link.');
       return;
@@ -659,11 +669,15 @@ class _PostFormScreenState extends State<PostFormScreen> {
     }
     final audio = _audioCtr.text.trim();
     if (_contentType == 'Podcast') {
-      if (audio.isEmpty) {
-        setState(() => _error = 'An audio URL is required for Podcast posts.');
+      // A podcast needs something to play: an audio URL, a YouTube link or
+      // an uploaded video (any one is enough).
+      final hasVideo = _clipMode ? _clipUrl.isNotEmpty : youtubeText.isNotEmpty;
+      if (audio.isEmpty && !hasVideo) {
+        setState(() => _error =
+            'Add something to play for Podcast posts: a YouTube link, an uploaded video or an audio URL.');
         return;
       }
-      if (!_isHttpsUrl(audio)) {
+      if (audio.isNotEmpty && !_isHttpsUrl(audio)) {
         setState(() => _error = 'The audio URL must start with https://');
         return;
       }
@@ -714,11 +728,10 @@ class _PostFormScreenState extends State<PostFormScreen> {
         contentType: _contentType,
         status: _status,
         contentDepth: _contentDepth,
-        deepDiveType: _contentDepth == 'deep' ? _deepDiveType : '',
+        deepDiveType: _contentDepth == kDepthDeep ? _deepDiveType : '',
         youtubeUrl: youtubeText.isEmpty ? null : youtubeText,
-        // Written as the toggle shows it; savePost unflags every other post
-        // in the same batch when this is true.
-        isFandomOfTheDay: _isFandomOfTheDay,
+      
+        isFandomOfTheDay: false,
         tags: widget.existing?.tags ?? const [],
         creatorId: creator?.id ??
             (_creatorId.isNotEmpty && _creatorId == existing?.creatorId
@@ -732,15 +745,24 @@ class _PostFormScreenState extends State<PostFormScreen> {
             _contentType == 'Gallery' ? List.of(_mediaUrls) : const [],
         audioUrl: _contentType == 'Podcast' ? audio : '',
         sourceUrl: _contentType == 'News' ? source : '',
-        durationSeconds: hasDuration ? (duration ?? 0) : 0,
+        durationSeconds: hasDuration ? (duration ?? 0) : 0
+        ,
         videoUrl: _clipMode ? _clipUrl : '',
         videoThumbnailUrl: _clipMode ? _clipThumbnailUrl : '',
+
       );
 
-      await PostService.instance.savePost(
+      final postId = await PostService.instance.savePost(
+
         post,
         isNew: widget.existing == null,
       );
+
+      if (_isFandomOfTheDay) {
+        await PostService.instance.setFandomOfTheDay(postId);
+      } else if (widget.existing?.isFandomOfTheDay ?? false) {
+        await PostService.instance.clearFandomOfTheDay(postId);
+      }
 
       if (mounted) Navigator.pop(context);
     } catch (e) {

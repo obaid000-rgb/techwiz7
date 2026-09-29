@@ -6,29 +6,41 @@ import '../../../services/category_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/image_upload_field.dart';
 
+// avaar screen 
+
 class AvatarLibraryScreen extends StatefulWidget {
+
   const AvatarLibraryScreen({super.key});
+
 
   @override
   State<AvatarLibraryScreen> createState() => _AvatarLibraryScreenState();
 }
 
 class _AvatarLibraryScreenState extends State<AvatarLibraryScreen> {
+
   late final Stream<List<AvatarLibraryItem>> _items = AvatarLibraryService.instance.watchAll();
+
   late final Stream<List<AppCategory>> _categories = CategoryService.instance.watchCategories();
 
   Future<void> _openForm(List<AppCategory> cats, [AvatarLibraryItem? existing]) => showDialog<void>(
+
         context: context,
+
         builder: (_) => _AvatarFormDialog(categories: cats, existing: existing),
       );
 
   Future<void> _setActive(AvatarLibraryItem item, bool active) async {
+
     try {
       await AvatarLibraryService.instance.update(item.id, isActive: active);
+
     } catch (e) {
       debugPrint('Avatar update failed: $e');
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
+
             const SnackBar(content: Text('Could not update. Check your connection.')));
       }
     }
@@ -37,31 +49,47 @@ class _AvatarLibraryScreenState extends State<AvatarLibraryScreen> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<AppCategory>>(
+
       stream: _categories,
       builder: (context, catSnap) {
+
+
         final cats = catSnap.data ?? const <AppCategory>[];
+
         final names = {for (final c in cats) c.key: c.name};
+
         return StreamBuilder<List<AvatarLibraryItem>>(
           stream: _items,
           builder: (context, snap) {
             if (snap.hasError) {
               debugPrint('Avatar library load error: ${snap.error}');
+
               return Center(
                 child: Text('Could not load avatars. Check your connection.',
+                
                     style: AppTheme.inter(size: 12, color: Colors.redAccent)),
               );
             }
             if (!snap.hasData) {
-              return const Center(child: CircularProgressIndicator(color: AppTheme.cyan));
+              
+              return const Center(child: 
+              CircularProgressIndicator(color: AppTheme.cyan));
             }
             final items = snap.data!;
             final groups = <String, List<AvatarLibraryItem>>{};
+
             for (final a in items) {
-              final key = names.containsKey(a.categoryId) ? a.categoryId : AvatarLibraryItem.general;
+              final key = names.containsKey(a.categoryId) ? a.categoryId : 
+              AvatarLibraryItem.general;
+
               groups.putIfAbsent(key, () => []).add(a);
+
             }
             final order = [
-              if (groups.containsKey(AvatarLibraryItem.general)) AvatarLibraryItem.general,
+              if (groups.containsKey
+              (AvatarLibraryItem.general)) 
+              AvatarLibraryItem.general,
+
               for (final c in cats)
                 if (groups.containsKey(c.key)) c.key,
             ];
@@ -84,31 +112,41 @@ class _AvatarLibraryScreenState extends State<AvatarLibraryScreen> {
                     ),
                   ]),
                 ),
+                // avator ka code 
                 Expanded(
                   child: items.isEmpty
                       ? Center(
                           child: Text('No library avatars yet. Tap ADD to upload artwork.',
                               textAlign: TextAlign.center,
                               style: AppTheme.inter(size: 13, color: Colors.grey)),
+
                         )
                       : ListView(
+
                           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                           children: [
                             for (final key in order) ...[
+
+
                               Padding(
                                 padding: const EdgeInsets.only(top: 12, bottom: 8),
                                 child: Text(
                                   (key == AvatarLibraryItem.general ? 'General' : names[key]!).toUpperCase(),
+
                                   style: AppTheme.orbitron(size: 10, color: Colors.grey, weight: FontWeight.w700),
                                 ),
                               ),
                               GridView.extent(
+
                                 shrinkWrap: true,
+
                                 physics: const NeverScrollableScrollPhysics(),
                                 maxCrossAxisExtent: 120,
                                 mainAxisSpacing: 10,
+
                                 crossAxisSpacing: 10,
                                 childAspectRatio: 0.78,
+
                                 children: [for (final a in groups[key]!) _tile(cats, a)],
                               ),
                             ],
@@ -117,6 +155,7 @@ class _AvatarLibraryScreenState extends State<AvatarLibraryScreen> {
                 ),
               ],
             );
+
           },
         );
       },
@@ -154,15 +193,22 @@ class _AvatarLibraryScreenState extends State<AvatarLibraryScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton(
+                  
                   tooltip: 'Edit',
+
                   visualDensity: VisualDensity.compact,
+
                   icon: const Icon(Icons.edit_outlined, size: 16, color: AppTheme.cyan),
                   onPressed: () => _openForm(cats, a),
+
                 ),
                 IconButton(
                   tooltip: a.isActive ? 'Deactivate' : 'Activate',
+
                   visualDensity: VisualDensity.compact,
+
                   icon: Icon(a.isActive ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+
                       size: 16, color: a.isActive ? Colors.redAccent : AppTheme.cyan),
                   onPressed: () => _setActive(a, !a.isActive),
                 ),
@@ -280,10 +326,15 @@ class _AvatarFormDialogState extends State<_AvatarFormDialog> {
               Text('Category', style: AppTheme.inter(size: 12, color: Colors.grey)),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
+
                 initialValue: _categoryId,
+
                 dropdownColor: AppTheme.card,
+
                 isExpanded: true,
+
                 style: AppTheme.inter(size: 13, color: Colors.white),
+
                 decoration: const InputDecoration(isDense: true),
                 items: [
                   const DropdownMenuItem(value: AvatarLibraryItem.general, child: Text('General')),
@@ -313,16 +364,22 @@ class _AvatarFormDialogState extends State<_AvatarFormDialog> {
         ),
       ),
       actions: [
+
         TextButton(
           onPressed: _saving ? null : () => Navigator.pop(context),
+
           child: Text('CANCEL', style: AppTheme.inter(size: 12, color: Colors.grey)),
         ),
         ElevatedButton(
           onPressed: _saving || _imageBusy ? null : _save,
+
           style: ElevatedButton.styleFrom(backgroundColor: AppTheme.cyan),
+
           child: Text('SAVE', style: AppTheme.inter(size: 12, color: Colors.black, weight: FontWeight.w700)),
         ),
       ],
     );
   }
 }
+
+// the avtor code done by hina 

@@ -6,7 +6,10 @@ import '../../services/category_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/category_icons.dart';
+import '../../utils/levels.dart';
 import '../../utils/youtube_utils.dart';
+import '../../widgets/deep_dive_lock.dart';
+import '../../widgets/lore_card.dart' show DeepDiveLockBadge;
 import '../../widgets/trending_badge.dart';
 import 'fandom_detail_screen.dart';
 
@@ -15,7 +18,7 @@ const String _kArtwork = 'assets/images/onboarding/onboarding_bg.jpg';
 /// Active posts tagged Deep Dive (contentDepth == 'deep'), newest first.
 Stream<List<Post>> deepDivePosts() => PostService.instance
     .watchActivePosts()
-    .map((posts) => posts.where((p) => p.contentDepth == 'deep').toList());
+    .map((posts) => posts.where(isDeepDive).toList());
 
 IconData _kindIcon(String kind) {
   switch (kind) {
@@ -471,6 +474,7 @@ class _DeepDiveCard extends StatelessWidget {
         runSpacing: 6,
         children: [
           _pill(_kindLabel(post.deepDiveType), _kindIcon(post.deepDiveType), color),
+          const DeepDiveLockBadge(),
           if (categoryName != null) _pill(categoryName!, Icons.public_rounded, Colors.white70),
         ],
       );
@@ -548,9 +552,7 @@ class _DeepDiveCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.orbitron(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                Text(post.content,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                PostExcerpt(post: post,
                     style: AppTheme.inter(size: 12, color: Colors.white70, height: 1.4)),
               ],
             ),
@@ -585,9 +587,7 @@ class _DeepDiveCard extends StatelessWidget {
                       style: AppTheme.inter(size: 14, color: Colors.white, weight: FontWeight.w700)),
                   const SizedBox(height: 4),
                   Expanded(
-                    child: Text(post.content,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                    child: PostExcerpt(post: post,
                         style: AppTheme.inter(size: 12, color: Colors.white60, height: 1.4)),
                   ),
                   Row(

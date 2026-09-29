@@ -5,17 +5,23 @@ service cloud.firestore {
   # helper
 
     function isSignedIn() {
+
       return request.auth != null;
     }
 
     function isOwner(uid) {
+
       return request.auth.uid == uid;
     }
 
     // Server-side admin check — reads the caller's own Firestore document.
+
     // This is the real enforcement layer; client-side route guards are UI only.
+
     function isAdmin() {
+
       return isSignedIn() &&
+      
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 

@@ -17,11 +17,6 @@ class UserService {
       .doc(user.uid)
       .update(user.toMap());
 
-  /// Adds/removes one product on the user's wishlist. Writes only that
-  /// array entry (arrayUnion/arrayRemove) plus that product's price baseline
-  /// (`wishlistPrices.<id>`, via a field path), in one update — so it can't
-  /// overwrite anything else on the user document with stale values.
-  /// [price] is the product's price at the moment it's added.
   Future<void> setWishlisted(String uid, String productId, bool wishlisted,
           {double? price}) =>
       FirestoreDb.instance.collection('users').doc(uid).update(<Object, Object?>{
@@ -33,9 +28,7 @@ class UserService {
             : FieldValue.delete(),
       });
 
-  /// Writes several wishlist price-baseline changes in one partial update.
-  /// Keys are product ids. Each leaf is written explicitly — previousPrice is
-  /// set or deleted, never left to "replace the nested map" semantics.
+
   Future<void> setWishlistPrices(String uid, Map<String, WishlistPrice> entries) {
     if (entries.isEmpty) return Future.value();
     return FirestoreDb.instance.collection('users').doc(uid).update(<Object, Object?>{
@@ -47,8 +40,7 @@ class UserService {
     });
   }
 
-  /// Edit Profile save: writes only the given basics (name / bio / avatar)
-  /// as one partial update — every other field on the user doc is untouched.
+
   Future<void> updateProfileBasics(
     String uid, {
     String? name,
@@ -83,7 +75,6 @@ class UserService {
             : FieldValue.arrayRemove([categoryKey]),
       });
 
-  /// Adds/removes one post on the user's bookmarks (single-field write).
   Future<void> setBookmarked(String uid, String postId, bool bookmarked) =>
       FirestoreDb.instance.collection('users').doc(uid).update({
         'bookmarkedPostIds': bookmarked
@@ -98,7 +89,6 @@ class UserService {
         'badge': badge,
       });
 
-  /// Admin: deactivate (signs the fan out and blocks sign-in) or reactivate.
   Future<void> setDisabled(String uid, bool disabled) =>
       FirestoreDb.instance.collection('users').doc(uid).update({'disabled': disabled});
 

@@ -22,15 +22,11 @@ class XpService {
     XpAction.order: 20,
   };
 
-  /// Set to the new level when an award crosses a level threshold; the
-  /// home screen shows the "Level up!" dialog and clears it.
+
   final ValueNotifier<int?> levelUps = ValueNotifier(null);
 
   Future<Box> _box() => Hive.openBox(boxName);
 
-  /// Awards XP for [action] to the signed-in fan (guests earn nothing).
-  /// [targetId] is the post or fandom for the "first time ever" actions.
-  /// Returns the XP awarded (0 when the action already counted).
   Future<int> award(XpAction action, {String? targetId, DateTime? now}) async {
     final user = AuthService.instance.currentUser;
     if (user == null) return 0;

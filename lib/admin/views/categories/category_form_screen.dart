@@ -12,37 +12,59 @@ class CategoryFormScreen extends StatefulWidget {
   State<CategoryFormScreen> createState() => _CategoryFormScreenState();
 }
 
+
 class _CategoryFormScreenState extends State<CategoryFormScreen> {
   late final TextEditingController _nameCtr;
+
   late final TextEditingController _keyCtr;
+
   late final TextEditingController _orderCtr;
+
   late final TextEditingController _descriptionCtr;
+
   String? _imageUrl;
+
   String _status = 'active';
-  bool _isFeaturedInCarousel = false;
+
+
   bool _showInOnboarding = false;
+
   bool _saving = false;
   String? _error;
+
   bool _keyEdited = false;
+
   bool _imageBusy = false;
 
   @override
   void initState() {
     super.initState();
+
     final e = widget.existing;
+
     _nameCtr = TextEditingController(text: e?.name ?? '');
+
     _keyCtr = TextEditingController(text: e?.key ?? '');
+
     _orderCtr = TextEditingController(text: e?.order.toString() ?? '0');
+
     _descriptionCtr = TextEditingController(text: e?.description ?? '');
+
     _imageUrl = e?.imageUrl;
+
     _status = e?.status ?? 'active';
-    _isFeaturedInCarousel = e?.isFeaturedInCarousel ?? false;
+
+
     _showInOnboarding = e?.showInOnboarding ?? false;
+
     if (e != null) _keyEdited = true;
 
     _nameCtr.addListener(() {
+
       if (!_keyEdited) {
+
         _keyCtr.text = _nameCtr.text
+
             .trim()
             .toLowerCase()
             .replaceAll(RegExp(r'\s+'), '_')
@@ -99,8 +121,10 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
 
       final duplicate = await CategoryService.instance
           .nameExists(name, excludeId: e?.id);
+
       if (duplicate) {
         if (mounted) {
+
           setState(() {
             _saving = false;
             _error = 'A category named "$name" already exists.';
@@ -120,14 +144,19 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
           key: key,
           name: name,
           imageUrl: _imageUrl,
+
           status: _status,
+
           order: nextOrder,
+
           description: _descriptionCtr.text.trim(),
-          isFeaturedInCarousel: _isFeaturedInCarousel,
+
+
           showInOnboarding: _showInOnboarding,
         ));
         if (!created) {
           if (mounted) {
+
             setState(() {
               _saving = false;
               _error = 'A category with this key already exists.';
@@ -143,7 +172,6 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
             status: _status,
             order: order,
             description: _descriptionCtr.text.trim(),
-            isFeaturedInCarousel: _isFeaturedInCarousel,
             showInOnboarding: _showInOnboarding,
           ),
         );
@@ -284,44 +312,6 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ── Featured in Carousel ───────────────────────────────────
-            // Deliberately distinct styling from Status above: this only
-            // controls Slider visibility, not whether the category works
-            // anywhere else in the app.
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppTheme.cyan.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.view_carousel_outlined,
-                      color: AppTheme.cyan, size: 18),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Featured in Carousel',
-                            style: AppTheme.inter(
-                                size: 13, color: Colors.white, weight: FontWeight.w600)),
-                        Text('Shows this category in the carousel on Feed',
-                            style: AppTheme.inter(size: 10, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                  Switch(
-                    value: _isFeaturedInCarousel,
-                    activeThumbColor: AppTheme.cyan,
-                    onChanged: (val) => setState(() => _isFeaturedInCarousel = val),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
             // ── Show in onboarding ─────────────────────────────────────
             // Only active categories are ever offered to new fans; if no
             // category has this on, the first 6 active ones are shown.
@@ -393,19 +383,26 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
               hintText: hint,
               filled: true,
               fillColor: AppTheme.bg,
+
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
                   horizontal: 12, vertical: 10),
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
+
                   borderSide:
                       const BorderSide(color: AppTheme.border)),
+
               enabledBorder: OutlineInputBorder(
+
                   borderRadius: BorderRadius.circular(10),
                   borderSide:
                       const BorderSide(color: AppTheme.border)),
+
               focusedBorder: OutlineInputBorder(
+
                   borderRadius: BorderRadius.circular(10),
+
                   borderSide:
                       const BorderSide(color: AppTheme.orange)),
             ),
@@ -413,3 +410,6 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
         ],
       );
 }
+
+
+// commit the correct coode 

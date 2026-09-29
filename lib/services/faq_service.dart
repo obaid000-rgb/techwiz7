@@ -12,8 +12,6 @@ class FaqService {
   Stream<List<Faq>> watchAll() => _col.orderBy('order').snapshots().map(
       (s) => s.docs.map((d) => Faq.fromMap(d.data(), d.id)).toList());
 
-  /// Active FAQs for Contact Us, in display order. Single where, sorted on
-  /// the device, so no composite index is needed.
   Stream<List<Faq>> watchActive() => _col.where('isActive', isEqualTo: true).snapshots().map(
       (s) => s.docs.map((d) => Faq.fromMap(d.data(), d.id)).toList()
         ..sort((a, b) => a.order.compareTo(b.order)));

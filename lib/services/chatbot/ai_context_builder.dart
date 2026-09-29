@@ -26,13 +26,45 @@ import '../order_service.dart';
 import '../resource_repository.dart';
 import '../saved_event_store.dart';
 import '../team_service.dart';
-import 'ai_assistant_knowledge.dart';
+import 'ai_request_context.dart';
 
-/// Everything the assistant knows for one chat, assembled on the device.
+/// One line of live content the assistant may be given, with the words it
+/// can be found by. Each request includes only the entries that match the
+/// question (see ai_request_context.dart), not the whole catalogue.
+class AiEntry {
+  /// fandom | creator | event | product | post | faq | glossary
+  final String kind;
+  final String line;
+  /// Words of the entry's name (strong match).
+  final Set<String> nameWords;
+  /// Other searchable words: city, venue, fandom, tags, category (weak match).
+  final Set<String> otherWords;
+  /// Products only, for "cheap" questions.
+  final double? price;
+
+  AiEntry(this.kind, this.line, String name, String other, {this.price})
+      : nameWords = aiWords(name),
+        otherWords = aiWords(other);
+}
+
+/// Everything the assistant knows, assembled on the device and cached.
 class AiContext {
-  final String systemInstruction;
   final DateTime builtAt;
   final String? uid;
+  /// Signed in (even if their account data couldn't be loaded).
+  final bool signedIn;
+  /// The fan's own account summary; null for guests or when it failed.
+  final String? account;
+  /// Who runs the app and how to reach them (always sent; it's short).
+  final String business;
+  /// Category list (always sent; it's short).
+  final String categories;
+  /// Searchable content, each kind in priority order: trending fandoms
+  /// first, events soonest first, posts newest/most viewed first.
+  final List<AiEntry> entries;
+  /// Lines always sent: a few trending fandoms and the next events.
+  final List<String> trendingFandomLines;
+  final List<String> upcomingEventLines;
   // Lookups for action buttons: an action tag is only shown when its id is
   // here, and these objects are what the buttons navigate to.
   final Map<String, Fandom> fandoms;
@@ -40,7 +72,7 @@ class AiContext {
   final Map<String, Merchandise> products;
   final Map<String, Post> posts;
   final Map<String, Creator> creators;
-  final Map<String, AppCategory> categories;
+  final Map<String, AppCategory> categoryMap;
   // Kept for the offline (local) answers.
   final List<Faq> faqs;
   final List<GlossaryTerm> glossary;
@@ -51,15 +83,21 @@ class AiContext {
   final bool atMaxLevel;
 
   const AiContext({
-    required this.systemInstruction,
     required this.builtAt,
     required this.uid,
+    this.signedIn = false,
+    this.account,
+    this.business = '',
+    this.categories = '',
+    this.entries = const [],
+    this.trendingFandomLines = const [],
+    this.upcomingEventLines = const [],
     this.fandoms = const {},
     this.events = const {},
     this.products = const {},
     this.posts = const {},
     this.creators = const {},
-    this.categories = const {},
+    this.categoryMap = const {},
     this.faqs = const [],
     this.glossary = const [],
     this.hasFollows = false,
@@ -68,33 +106,26 @@ class AiContext {
     this.atMaxLevel = false,
   });
 
-  /// Rough size of the system instruction in tokens (about 4 characters
-  /// per token for English text).
-  int get approxTokens => (systemInstruction.length / 4).round();
+  /// Used when loading the app's data failed completely: Gemini still gets
+  /// the rules and the feature guide, just no live content.
+  factory AiContext.empty({String? uid, bool signedIn = false}) =>
+      AiContext(builtAt: DateTime.now(), uid: uid, signedIn: signedIn);
 }
 
-/// Builds the assistant's system instruction from three sources:
-///  1. the feature guide (written from the app's screens, in
-///     ai_assistant_knowledge.dart);
-///  2. a compact snapshot of the app's live content;
-///  3. the signed-in fan's own account (nothing for guests, never anyone
-///     else's data).
-/// The result is cached for 10 minutes per account.
+/// Loads the app's live content, the business details and the signed-in
+/// fan's own account (nothing for guests, never anyone else's data) into
+/// an [AiContext]. Cached for 10 minutes per account.
 class AiContextBuilder {
   static final AiContextBuilder instance = AiContextBuilder._();
   AiContextBuilder._();
 
   static const cacheFor = Duration(minutes: 10);
 
-  // ── Snapshot size limits ─────────────────────────────────────────────────
-  // The whole system instruction must stay under ~25,000 tokens (~100,000
-  // characters). Lists are capped first; if the text is still too long,
-  // descriptions are shortened step by step (see [_compose]).
+  // Caps on what is loaded; each request then picks only a few matches.
   static const maxEvents = 40;
   static const maxProducts = 60;
   static const maxNewestPosts = 40;
   static const maxTrendingPosts = 10;
-  static const maxChars = 100000;
 
   AiContext? _cache;
 
@@ -169,28 +200,26 @@ class AiContextBuilder {
         final t = todayViews(b).compareTo(todayViews(a));
         return t != 0 ? t : b.viewCount.compareTo(a.viewCount);
       });
+    final trendingPosts = [
+      for (final p in trending.take(maxTrendingPosts))
+        if (todayViews(p) > 0 || p.viewCount > 0) p,
+    ];
     final shownPosts = <String, Post>{
+      for (final p in trendingPosts) p.id: p,
       for (final p in newest.take(maxNewestPosts)) p.id: p,
-      for (final p in trending.take(maxTrendingPosts))
-        if (todayViews(p) > 0 || p.viewCount > 0) p.id: p,
     };
-    final trendingPostIds = {
-      for (final p in trending.take(maxTrendingPosts))
-        if (todayViews(p) > 0 || p.viewCount > 0) p.id,
-    };
+    final trendingFandoms = rankTrendingFandoms(fandoms, now, limit: 8, fallbackToMostFollowed: false);
 
-    final data = _Data(
+    final d = _Data(
       now: now,
       categories: categories,
       fandoms: fandoms,
-      trendingFandomIds: {
-        for (final f in rankTrendingFandoms(fandoms, now, limit: 8, fallbackToMostFollowed: false)) f.id,
-      },
+      trendingFandomIds: {for (final f in trendingFandoms) f.id},
       creators: creators,
       events: shownEvents,
       products: shownProducts,
       posts: shownPosts.values.toList(),
-      trendingPostIds: trendingPostIds,
+      trendingPostIds: {for (final p in trendingPosts) p.id},
       faqs: faqs,
       team: team,
       glossary: glossary,
@@ -199,18 +228,26 @@ class AiContextBuilder {
       orders: orders,
       saved: saved,
     );
-    final instruction = _compose(data);
+    final catName = {for (final c in categories) c.key: c.name};
+    final fandomLine = {for (final f in fandoms) f.id: _fandomLine(d, f, catName)};
+    final eventLines = [for (final e in shownEvents) _eventLine(d, e)];
 
     return AiContext(
-      systemInstruction: instruction,
       builtAt: now,
       uid: user?.uid,
+      signedIn: user != null,
+      account: _account(d),
+      business: _business(d),
+      categories: [for (final c in categories) '- ${c.key} | ${c.name}'].join('\n'),
+      entries: _entries(d, catName, fandomLine, eventLines),
+      trendingFandomLines: [for (final f in trendingFandoms.take(5)) fandomLine[f.id]!],
+      upcomingEventLines: eventLines.take(5).toList(),
       fandoms: {for (final f in fandoms) f.id: f},
       events: {for (final e in shownEvents) e.id: e},
       products: {for (final p in shownProducts) p.id: p},
       posts: shownPosts,
       creators: {for (final c in creators) c.id: c},
-      categories: {for (final c in categories) c.key: c},
+      categoryMap: {for (final c in categories) c.key: c},
       faqs: faqs,
       glossary: glossary,
       hasFollows: (user?.followedFandomIds.isNotEmpty ?? false),
@@ -220,9 +257,82 @@ class AiContextBuilder {
     );
   }
 
-  /// Builds the instruction, shortening descriptions until it fits
-  /// [maxChars]: step 0 full, then one-line texts cut to 120, 70 and 40
-  /// characters, then glossary definitions dropped to their first words.
+  static String _cut(String s, int max) {
+    final one = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return one.length <= max ? one : '${one.substring(0, max).trimRight()}…';
+  }
+
+  String _fandomLine(_Data d, Fandom f, Map<String, String> catName) =>
+      '- ${f.id} | ${f.name} | ${catName[f.categoryId] ?? f.categoryName} | '
+      '${formatCount(f.followerCount)} followers | ${d.trendingFandomIds.contains(f.id) ? 'TRENDING' : '-'} | '
+      '${f.tags.join(', ')} | ${_cut(f.description, 160)}';
+
+  String _eventLine(_Data d, EventItem e) {
+    final fandomName = {for (final f in d.fandoms) f.id: f.name};
+    return '- ${e.id} | ${e.title} | ${e.eventType.label} | ${eventStatusLabel(e.statusAt(d.now))} | '
+        '${e.city} | ${e.venue} | ${formatEventRange(e.date, e.endAt, now: d.now)} | '
+        '${e.fandomIds.map((id) => fandomName[id]).whereType<String>().join(', ')} | '
+        '${e.ticketPrice.isEmpty ? 'Free / not set' : e.ticketPrice} | '
+        'ticket link: ${e.ticketLink.isEmpty ? 'no' : 'yes'}';
+  }
+
+  /// Every piece of searchable content, one line each.
+  List<AiEntry> _entries(_Data d, Map<String, String> catName, Map<String, String> fandomLine,
+      List<String> eventLines) {
+    final fandomName = {for (final f in d.fandoms) f.id: f.name};
+    String names(List<String> ids) => ids.map((id) => fandomName[id]).whereType<String>().join(' ');
+    final trendingFirst = List.of(d.fandoms)
+      ..sort((a, b) => (d.trendingFandomIds.contains(b.id) ? 1 : 0)
+          .compareTo(d.trendingFandomIds.contains(a.id) ? 1 : 0));
+    return [
+      for (final f in trendingFirst)
+        AiEntry('fandom', fandomLine[f.id]!, f.name,
+            '${f.tags.join(' ')} ${catName[f.categoryId] ?? f.categoryName}'),
+      for (final c in d.creators)
+        AiEntry('creator',
+            '- ${c.id} | ${c.name} | ${kCreatorKindLabels[c.kind] ?? c.kind} | '
+                '${c.isVerified ? 'verified' : '-'} | ${names(c.fandomIds)}',
+            c.name, names(c.fandomIds)),
+      for (var i = 0; i < d.events.length; i++)
+        AiEntry('event', eventLines[i], d.events[i].title,
+            '${d.events[i].city} ${d.events[i].venue} ${d.events[i].eventType.label} '
+                '${names(d.events[i].fandomIds)} ${catName[d.events[i].category] ?? ''}'),
+      for (final p in d.products)
+        AiEntry('product',
+            '- ${p.id} | ${p.name} | ${catName[p.category] ?? p.category} | '
+                '${p.fandomName.isEmpty ? '-' : p.fandomName} | \$${p.price.toStringAsFixed(2)}',
+            p.name, '${p.fandomName} ${catName[p.category] ?? p.category}',
+            price: p.price),
+      // Deep Dive exclusion: for a fan who can't open Deep Dive yet
+      // (canViewDeepDive is false, and always for guests), Deep Dive posts
+      // are listed with their title and fandom ONLY, so the model cannot
+      // reveal their text. The context is built per account, so fans at
+      // Level DEEP_DIVE_LEVEL+ and admins get the usual short summary.
+      for (final p in d.posts)
+        AiEntry('post', _postLine(d, p), p.title,
+            '${p.fandomName} ${p.creatorName} ${p.contentType} ${catName[p.category] ?? ''}'),
+      for (final f in d.faqs)
+        AiEntry('faq', 'Q: ${f.question}\nA: ${_cut(f.answer, 700)}', f.question, f.answer),
+      for (final g in d.glossary)
+        AiEntry('glossary',
+            '- ${g.term} | ${catName[g.category] ?? (g.category.isEmpty ? 'General' : g.category)} | '
+                '${_cut(g.definition, 220)}',
+            g.term, catName[g.category] ?? ''),
+    ];
+  }
+
+  String _postLine(_Data d, Post p) {
+    final deep = isDeepDive(p);
+    final depth = deep ? 'DEEP DIVE (Level $DEEP_DIVE_LEVEL)' : (p.contentDepth == 'beginner' ? 'beginner' : 'standard');
+    final summary = deep && !canViewDeepDive(d.user)
+        ? '(locked — content not available to you)'
+        : _cut(p.content, 160);
+    final hot = d.trendingPostIds.contains(p.id) ? ' [most viewed]' : '';
+    return '- ${p.id} | ${p.title}$hot | ${p.contentType} | '
+        '${p.fandomName.isEmpty ? '-' : p.fandomName} | ${p.creatorName.isEmpty ? '-' : p.creatorName} | '
+        '$depth | $summary';
+  }
+
   /// Who runs the app and how to reach them: the same facts About Us and
   /// Contact Us show. Unpublished details are marked so the helper never
   /// invents an email, phone or address.
@@ -247,100 +357,6 @@ class AiContextBuilder {
     return b.toString().trimRight();
   }
 
-  String _compose(_Data d) {
-    for (var level = 0; level < 5; level++) {
-      final text = assembleSystemInstruction(
-        today: d.now,
-        account: _account(d),
-        business: _business(d),
-        snapshot: _snapshot(d, level),
-      );
-      if (text.length <= maxChars || level == 4) return text;
-    }
-    throw StateError('unreachable');
-  }
-
-  static String _cut(String s, int max) {
-    final one = s.replaceAll(RegExp(r'\s+'), ' ').trim();
-    return one.length <= max ? one : '${one.substring(0, max).trimRight()}…';
-  }
-
-  String _snapshot(_Data d, int level) {
-    final lineMax = const [200, 120, 70, 40, 30][level];
-    final glossMax = const [220, 140, 90, 50, 30][level];
-    final b = StringBuffer();
-    final catName = {for (final c in d.categories) c.key: c.name};
-    final fandomName = {for (final f in d.fandoms) f.id: f.name};
-    String names(List<String> ids) =>
-        ids.map((id) => fandomName[id]).whereType<String>().join(', ');
-    String money(double v) => '\$${v.toStringAsFixed(2)}';
-
-    b.writeln('CATEGORIES (id | name):');
-    for (final c in d.categories) {
-      b.writeln('- ${c.key} | ${c.name}');
-    }
-
-    b.writeln('\nFANDOMS (id | name | category | followers | trending | tags | about):');
-    for (final f in d.fandoms) {
-      b.writeln('- ${f.id} | ${f.name} | ${catName[f.categoryId] ?? f.categoryName} | '
-          '${formatCount(f.followerCount)} | ${d.trendingFandomIds.contains(f.id) ? 'TRENDING' : '-'} | '
-          '${f.tags.join(', ')} | ${_cut(f.description, lineMax)}');
-    }
-
-    b.writeln('\nCREATORS (id | name | kind | verified | fandoms):');
-    for (final c in d.creators) {
-      b.writeln('- ${c.id} | ${c.name} | ${kCreatorKindLabels[c.kind] ?? c.kind} | '
-          '${c.isVerified ? 'verified' : '-'} | ${names(c.fandomIds)}');
-    }
-
-    b.writeln('\nEVENTS — upcoming and happening now, soonest first, up to $maxEvents '
-        '(id | title | type | status | city | venue | when | fandoms | price | ticket link):');
-    for (final e in d.events) {
-      final status = eventStatusLabel(e.statusAt(d.now));
-      b.writeln('- ${e.id} | ${e.title} | ${e.eventType.label} | $status | ${e.city} | ${e.venue} | '
-          '${formatEventRange(e.date, e.endAt, now: d.now)} | ${names(e.fandomIds)} | '
-          '${e.ticketPrice.isEmpty ? 'Free / not set' : e.ticketPrice} | '
-          '${e.ticketLink.isEmpty ? 'no' : 'yes'}');
-    }
-    if (d.events.isEmpty) b.writeln('- (no upcoming events)');
-
-    b.writeln('\nSHOP PRODUCTS — up to $maxProducts (id | name | category | fandom | price):');
-    for (final p in d.products) {
-      b.writeln('- ${p.id} | ${p.name} | ${catName[p.category] ?? p.category} | '
-          '${p.fandomName.isEmpty ? '-' : p.fandomName} | ${money(p.price)}');
-    }
-    if (d.products.isEmpty) b.writeln('- (no products)');
-
-    // Deep Dive exclusion: Deep Dive posts are listed with their title and
-    // fandom ONLY. Their body is never put in the context, so the model
-    // cannot reveal it to anyone, whatever their level.
-    b.writeln('\nPOSTS — newest $maxNewestPosts plus the most viewed '
-        '(id | title | type | fandom | creator | depth | summary):');
-    for (final p in d.posts) {
-      final deep = p.contentDepth == 'deep';
-      final depth = deep ? 'DEEP DIVE (Level $kDeepDiveLevel)' : (p.contentDepth == 'beginner' ? 'beginner' : 'standard');
-      final summary = deep ? '(locked — content not available to you)' : _cut(p.content, lineMax);
-      final hot = d.trendingPostIds.contains(p.id) ? ' [most viewed]' : '';
-      b.writeln('- ${p.id} | ${p.title}$hot | ${p.contentType} | '
-          '${p.fandomName.isEmpty ? '-' : p.fandomName} | ${p.creatorName.isEmpty ? '-' : p.creatorName} | '
-          '$depth | $summary');
-    }
-
-    b.writeln('\nFAQS (official answers from the Fandom Verse team; treat as correct):');
-    for (final f in d.faqs) {
-      b.writeln('Q: ${f.question}');
-      b.writeln('A: ${_cut(f.answer, level == 0 ? 1000 : glossMax * 2)}');
-    }
-    if (d.faqs.isEmpty) b.writeln('- (none)');
-
-    b.writeln('\nGLOSSARY (term | category | meaning):');
-    for (final g in d.glossary) {
-      b.writeln('- ${g.term} | ${catName[g.category] ?? (g.category.isEmpty ? 'General' : g.category)} | '
-          '${_cut(g.definition, glossMax)}');
-    }
-    return b.toString();
-  }
-
   /// The signed-in fan's own data only; null for guests.
   String? _account(_Data d) {
     final u = d.user;
@@ -354,7 +370,7 @@ class AiContextBuilder {
       ..writeln('Name: ${u.name.isEmpty ? '(not set)' : u.name}')
       ..writeln('Level: $level (${levelName(level)}), XP: ${u.xp}'
           '${next == null ? ' — max level' : ', ${xpToNextLevel(u.xp)} XP to Level ${level + 1} (${levelName(level + 1)}) at $next XP'}')
-      ..writeln('Deep Dive: ${canOpenDeepDive(signedIn: true, isAdmin: u.isAdmin, xp: u.xp) ? 'UNLOCKED' : 'LOCKED (needs Level $kDeepDiveLevel, ${xpToLevel(u.xp, kDeepDiveLevel)} XP to go)'}')
+      ..writeln('Deep Dive: ${canViewDeepDive(u) ? 'UNLOCKED' : 'LOCKED (needs Level $DEEP_DIVE_LEVEL, ${xpToLevel(u.xp, DEEP_DIVE_LEVEL)} XP to go)'}')
       ..writeln('Follows: ${u.followedFandomIds.map((id) => fandomName[id] ?? id).join(', ').ifEmpty('none')}')
       ..writeln('Interests: ${u.categories.map((k) => catName[k] ?? k).join(', ').ifEmpty('none')}');
     final saved = List.of(d.saved)..sort((a, b) => a.event.date.compareTo(b.event.date));
@@ -376,7 +392,7 @@ class AiContextBuilder {
           'status: ${o.status} | total \$${o.total.toStringAsFixed(2)} | '
           '${o.items.map((i) => '${i.quantity}× ${i.name}').join(', ')}');
     }
-    return b.toString();
+    return b.toString().trimRight();
   }
 }
 

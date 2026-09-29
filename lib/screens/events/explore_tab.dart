@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -6,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../../logic/event_query.dart';
+import '../../logic/event_status.dart';
 import '../../models/event_item.dart';
 import '../../models/event_type.dart';
 import '../../services/auth_service.dart';
@@ -46,7 +48,6 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
   LocationStatus? _locStatus; // null until the first silent check finishes
   bool _locating = false;
   String? _city;
-  bool _cityLookupFailed = false;
   // Subscribed once here and kept in state — NOT via a StreamBuilder in the
   // ListView below. Location results insert/remove header rows above the
   // list, which made the ListView recreate the StreamBuilder; the new
@@ -123,7 +124,6 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
       _fanPosition = result.position;
       _locating = false;
       _city = null;
-      _cityLookupFailed = false;
     });
     final pos = result.position;
     if (pos != null) {
@@ -133,7 +133,7 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
       if (!mounted || _fanPosition != pos) return;
       setState(() {
         _city = city;
-        _cityLookupFailed = city == null;
+
       });
     }
   }
@@ -149,7 +149,7 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
     switch (_locStatus!) {
       case LocationStatus.notRequested:
         icon = Icons.near_me_outlined;
-        text = 'Turn on location to see the closest events first.';
+        text = 'Turn on location to see events near you';
         action = 'Turn on';
         onAction = () => _locate(request: true);
       case LocationStatus.denied:
@@ -261,24 +261,9 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
           const SizedBox(height: 20),
           _viewToggle(),
           const SizedBox(height: 16),
-          if (_locStatus != null && _fanPosition == null) _locationBanner(),
-          if (_fanPosition != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: Row(children: [
-                const Icon(Icons.near_me, color: AppTheme.pink, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                      _city != null
-                          ? 'Near $_city · sorted by distance'
-                          : _cityLookupFailed
-                              ? 'Couldn\'t determine your city, showing all events by distance'
-                              : 'Sorted by distance from you',
-                      style: AppTheme.inter(size: 13, color: AppTheme.textSecondary)),
-                ),
-              ]),
-            ),
+          // List view shows this card in place of the "Near you" row; Map
+          // and Calendar keep it on top so location can be turned on there.
+          if (_view != _EventView.list && _locStatus != null && _fanPosition == null) _locationBanner(),
           Builder(
             builder: (context) {
               if (_eventsError != null && _eventsData == null) {
@@ -306,10 +291,15 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
               // The filter that actually applies: a chosen city that no longer
               // has events is dropped, radius needs a location, and "My
               // fandoms" needs an account.
+              //
+              // No default filter: the tab opens on EventFilter.none, and
+              // the detected location never becomes a city or radius
+              // filter. It only feeds the "Near you" row and the distances
+              // on cards; only a fan's own choices narrow the list.
               final effective = _filter.copyWith(
                 cities: {
                   for (final c in _filter.cities)
-                    if (cities.any((x) => x.toLowerCase() == c.toLowerCase())) c,
+                    if (cities.any((x) => normalizeCity(x) == normalizeCity(c))) c,
                 },
                 clearRadius: location == null,
                 myFandomsOnly: user != null && _filter.myFandomsOnly,
@@ -334,7 +324,11 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
                     _noMatches(effective)
                   else
                     switch (_view) {
-                      _EventView.list => _listView(context, matches),
+                      // Rows ("Near you", "Happening now") only while no
+                      // filter is on; a filtered list is shown on its own.
+                      _EventView.list => effective.isEmpty
+                          ? _browseView(context, matches, now)
+                          : _listView(context, matches),
                       _EventView.map => _mapView(context, matches),
                       _EventView.calendar => _calendarView(context, matches),
                     },
@@ -568,17 +562,112 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
   Widget _listView(BuildContext context, List<EventMatch> events) =>
       Column(children: [for (final e in events) _eventCard(context, e)]);
 
+  static const List<String> _monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  /// The unfiltered List view: "Near you" (or the turn-on-location card),
+  /// "Happening now", then every upcoming event from every city.
+  Widget _browseView(BuildContext context, List<EventMatch> all, DateTime now) {
+    // "Near you" rule: within kNearYouKm (50 km) of the fan, or in the city
+    // their location resolves to; nearest first. Needs a location fix.
+    final near = _fanPosition == null ? const <EventMatch>[] : nearYouEvents(all, _city);
+    final happening = [
+      for (final m in soonestFirst(all))
+        if (m.event.statusAt(now) == EventStatus.happeningNow) m,
+    ];
+    final upcoming = soonestFirst(all);
+    final children = <Widget>[];
+
+    if (_fanPosition == null) {
+      if (_locStatus != null) children.add(_locationBanner());
+    } else if (near.isNotEmpty) {
+      children
+        ..add(_sectionTitle('NEAR YOU',
+            _city != null ? 'In ${displayCity(_city!)} or within ${kNearYouKm.round()} km' : 'Within ${kNearYouKm.round()} km of you'))
+        ..add(_row(near))
+        ..add(const SizedBox(height: 22));
+    }
+    if (happening.isNotEmpty) {
+      children
+        ..add(_sectionTitle('HAPPENING NOW', 'On right now'))
+        ..add(_row(happening))
+        ..add(const SizedBox(height: 22));
+    }
+    children.add(_sectionTitle('ALL UPCOMING EVENTS', 'Every city, soonest first'));
+    String? month;
+    for (final m in upcoming) {
+      final label = '${_monthNames[m.event.date.month - 1]} ${m.event.date.year}';
+      if (label != month) {
+        month = label;
+        children.add(Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 10),
+          child: Text(label, style: AppTheme.inter(size: 14, weight: FontWeight.w700, color: AppTheme.pink)),
+        ));
+      }
+      children.add(_eventCard(context, m));
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+  }
+
+  Widget _sectionTitle(String title, String subtitle) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: AppTheme.orbitron(size: 13, weight: FontWeight.w800)),
+          const SizedBox(height: 2),
+          Text(subtitle, style: AppTheme.inter(size: 12, color: AppTheme.textMuted)),
+        ]),
+      );
+
+  /// A horizontal row of compact cards.
+  Widget _row(List<EventMatch> items) => SizedBox(
+        height: EventCard.compactRowHeight,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          clipBehavior: Clip.none,
+          itemCount: items.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 12),
+          itemBuilder: (context, i) => EventCard(
+            key: ValueKey('row-${items[i].event.id}'),
+            event: items[i].event,
+            distanceKm: items[i].distanceKm,
+            compact: true,
+          ),
+        ),
+      );
+
   Widget _mapView(BuildContext context, List<EventMatch> events) {
     final withCoords = events.where((e) => e.event.hasCoordinates).toList();
-    // With a city chosen, centre on the results instead of the Fan.
-    final cityMode = _filter.cities.isNotEmpty && withCoords.isNotEmpty;
-    final center = cityMode
-        ? LatLng(withCoords.first.event.latitude!, withCoords.first.event.longitude!)
-        : _fanPosition != null
-            ? LatLng(_fanPosition!.latitude, _fanPosition!.longitude)
-            : withCoords.isNotEmpty
-                ? LatLng(withCoords.first.event.latitude!, withCoords.first.event.longitude!)
-                : const LatLng(20, 0);
+    final points = [for (final e in withCoords) LatLng(e.event.latitude!, e.event.longitude!)];
+    // Camera: with a city chosen, fit that city's results. Otherwise centre
+    // on the fan when known, zoomed out just enough to show every marker;
+    // without a location, fit all markers.
+    final cityMode = _filter.cities.isNotEmpty && points.isNotEmpty;
+    final fan = _fanPosition == null ? null : LatLng(_fanPosition!.latitude, _fanPosition!.longitude);
+    final MapOptions options;
+    if (!cityMode && fan != null) {
+      var farthestKm = 0.0;
+      for (final p in points) {
+        farthestKm = math.max(farthestKm, haversineKm(fan.latitude, fan.longitude, p.latitude, p.longitude));
+      }
+      // Web-Mercator metres per pixel at zoom z = 156543 · cos(lat) / 2^z;
+      // pick the zoom where the farthest marker is ~150 px from the centre.
+      final zoom = farthestKm < 1
+          ? 11.0
+          : (math.log(156543 * math.cos(fan.latitude * math.pi / 180) * 150 / (farthestKm * 1000)) / math.ln2)
+              .clamp(2.0, 11.0);
+      options = MapOptions(initialCenter: fan, initialZoom: zoom);
+    } else if (points.length > 1) {
+      options = MapOptions(
+        initialCameraFit: CameraFit.coordinates(
+            coordinates: points, padding: const EdgeInsets.all(48), maxZoom: 12),
+      );
+    } else {
+      options = MapOptions(
+          initialCenter: points.isNotEmpty ? points.first : const LatLng(20, 0),
+          initialZoom: points.isNotEmpty ? 11 : 2);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -590,8 +679,7 @@ class _ExploreTabState extends State<ExploreTab> with WidgetsBindingObserver {
               // Rebuilt when the filtered set changes so the camera moves to
               // the new centre.
               key: ValueKey(withCoords.map((e) => e.event.id).join(',')),
-              options: MapOptions(
-                  initialCenter: center, initialZoom: cityMode || _fanPosition != null ? 11 : 2),
+              options: options,
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',

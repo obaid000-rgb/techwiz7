@@ -64,7 +64,8 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
       setState(() {});
       _scrollToEnd();
     }
-    if (last != null && !last.offline && last.notice == null) {
+    // XP only for real Gemini answers (not offline, busy or blocked).
+    if (last != null && !last.offline && !last.failed) {
       XpService.instance.award(XpAction.aiQuestion);
     }
     if (mounted) setState(() => _busy = false);
@@ -116,7 +117,7 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
       case 'creator':
         _push(CreatorProfileScreen(creatorId: a.id));
       case 'category':
-        final c = ctx?.categories[a.id];
+        final c = ctx?.categoryMap[a.id];
         if (c != null) _push(CategoryDetailScreen(category: c));
       case 'screen':
         switch (a.id) {
@@ -255,7 +256,7 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
 
   Widget _message(AiMessage m) {
     if (m.fromUser) return _bubble(Text(m.text, style: _textStyle), fromUser: true);
-    if (m.streaming && m.text.isEmpty) return _typing();
+    if (m.streaming && m.text.isEmpty) return _typing(m.status ?? 'Thinking…');
     return Align(
       alignment: Alignment.centerLeft,
       child: Column(
@@ -325,7 +326,7 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
         ),
       );
 
-  Widget _typing() => Align(
+  Widget _typing(String label) => Align(
         alignment: Alignment.centerLeft,
         child: Container(
           margin: const EdgeInsets.only(bottom: 8),
@@ -339,7 +340,7 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
             const SizedBox(
                 width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan)),
             const SizedBox(width: 10),
-            Text('Thinking…', style: AppTheme.inter(size: 12, color: AppTheme.textMuted)),
+            Text(label, style: AppTheme.inter(size: 12, color: AppTheme.textMuted)),
           ]),
         ),
       );

@@ -6,9 +6,8 @@ import '../../logic/event_status.dart';
 import '../../services/auth_service.dart';
 import '../../services/saved_event_store.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/event_format.dart';
 import 'event_detail_screen.dart';
-import 'widgets/event_card.dart' show EventTypeChip, EventStatusBadge;
+import 'widgets/event_card.dart' show EventCard;
 import 'widgets/save_event_button.dart' show NoLongerListedNote, OfflineCopyNote;
 
 /// My Agenda: the fan's saved events, read only from the offline copies in
@@ -135,91 +134,46 @@ class _MyAgendaScreenState extends State<MyAgendaScreen> {
           for (final e in items) _tile(e),
         ];
 
-  Widget _cover(SavedEventEntry e) {
-    Widget fallback() => Container(
-          color: AppTheme.bg,
-          alignment: Alignment.center,
-          child: Icon(e.event.eventType.icon, color: e.event.eventType.color),
-        );
-    if (e.imagePath != null && !kIsWeb) {
-      return Image.file(File(e.imagePath!), fit: BoxFit.cover, errorBuilder: (c, x, s) => fallback());
-    }
-    if (e.imageBytes != null) return Image.memory(e.imageBytes!, fit: BoxFit.cover);
-    return fallback();
+  /// The saved copy's image (works offline); null lets the card use the
+  /// network cover or its placeholder.
+  ImageProvider? _cover(SavedEventEntry e) {
+    if (e.imagePath != null && !kIsWeb) return FileImage(File(e.imagePath!));
+    if (e.imageBytes != null) return MemoryImage(e.imageBytes!);
+    return null;
   }
 
   Widget _tile(SavedEventEntry entry) {
     final ev = entry.event;
-    final place = [ev.venue, ev.city].where((x) => x.trim().isNotEmpty).join(', ');
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: AppTheme.card,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => EventDetailScreen(
-                event: ev,
-                offline: _offline,
-                localImagePath: entry.imagePath,
-                localImageBytes: entry.imageBytes,
-                noLongerListed: entry.noLongerListed,
-              ),
-            ),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.border),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: SizedBox(width: 72, height: 72, child: _cover(entry)),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(spacing: 6, runSpacing: 4, children: [
-                        EventTypeChip(event: ev),
-                        EventStatusBadge(event: ev),
-                      ]),
-                      const SizedBox(height: 6),
-                      Text(ev.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTheme.inter(size: 14, weight: FontWeight.w600)),
-                      const SizedBox(height: 3),
-                      Text(formatEventRange(ev.date, ev.endAt),
-                          style: AppTheme.inter(size: 12, color: AppTheme.cyan)),
-                      if (place.isNotEmpty)
-                        Text(place,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTheme.inter(size: 12, color: AppTheme.textSecondary)),
-                      if (ev.sessions.isNotEmpty)
-                        Text('${ev.sessions.length} agenda sessions',
-                            style: AppTheme.inter(size: 11, color: AppTheme.textMuted)),
-                      if (entry.noLongerListed) ...[
-                        const SizedBox(height: 6),
-                        const NoLongerListedNote(),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
+    return EventCard(
+      event: ev,
+      coverImage: _cover(entry),
+      // Saving/removing stays on Event Detail, as before.
+      showSave: false,
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EventDetailScreen(
+            event: ev,
+            offline: _offline,
+            localImagePath: entry.imagePath,
+            localImageBytes: entry.imageBytes,
+            noLongerListed: entry.noLongerListed,
           ),
         ),
       ),
+      footer: ev.sessions.isEmpty && !entry.noLongerListed
+          ? null
+          : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (ev.sessions.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text('${ev.sessions.length} agenda sessions',
+                    style: AppTheme.inter(size: 11, color: AppTheme.textMuted)),
+              ],
+              if (entry.noLongerListed) ...[
+                const SizedBox(height: 6),
+                const NoLongerListedNote(),
+              ],
+            ]),
     );
   }
 }

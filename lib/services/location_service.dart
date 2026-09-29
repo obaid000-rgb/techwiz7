@@ -4,30 +4,21 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
-/// Every distinct outcome of trying to locate the Fan. These are kept
-/// separate on purpose — each one has a different cause and a different fix,
-/// and lumping them together is what made location failures look "silent".
+
 enum LocationStatus {
   /// Permission granted and a position was obtained.
   granted,
 
-  /// Permission hasn't been asked for yet (silent check only, no prompt shown).
   notRequested,
 
-  /// The Fan refused the OS popup. The popup can still be shown again.
   denied,
 
-  /// Permanently refused: the OS will NOT show the popup again — the only fix
-  /// is the app's system settings page. (On Android, checkPermission() never
-  /// reports this; only requestPermission() does, and it returns instantly
-  /// without any popup — which is why "tapping allow did nothing".)
+
   deniedForever,
 
-  /// Device location (GPS) is switched off at the OS level. This is not an
-  /// app-permission problem; the fix is the device's location settings.
   serviceDisabled,
 
-  /// Permission is fine but no position came back (no GPS fix / timeout).
+ 
   positionUnavailable,
 }
 
@@ -44,8 +35,7 @@ class LocationService {
   static const Duration _positionTimeout = Duration(seconds: 15);
   static const Duration _geocodeTimeout = Duration(seconds: 8);
 
-  /// Android never reports deniedForever from checkPermission(), so once a
-  /// request has returned it we remember it for the rest of the session.
+
   bool _knownDeniedForever = false;
 
   void _log(String msg) {
@@ -56,8 +46,7 @@ class LocationService {
   /// With [requestIfNeeded] false the OS popup is never shown: an unasked
   /// permission comes back as [LocationStatus.notRequested].
   Future<LocationResult> locate({bool requestIfNeeded = true}) async {
-    // 1. Device-level GPS switch — checked before permission because it's a
-    //    different problem with a different fix.
+
     if (!await Geolocator.isLocationServiceEnabled()) {
       _log('state=serviceDisabled (device location is off)');
       return const LocationResult(LocationStatus.serviceDisabled);
@@ -129,21 +118,13 @@ class LocationService {
   Future<Position?> getCurrentPosition({bool requestIfNeeded = true}) async =>
       (await locate(requestIfNeeded: requestIfNeeded)).position;
 
-  /// Opens this app's page in system settings (fix for deniedForever).
-  /// Not available on web — callers hide the button there.
+
   Future<bool> openAppSettings() => Geolocator.openAppSettings();
 
-  /// Opens the device's location settings (fix for serviceDisabled).
+
   Future<bool> openLocationSettings() => Geolocator.openLocationSettings();
 
-  /// Reverse-geocodes coordinates to a city name via OSM's free Nominatim
-  /// API — no existing geocoding package was found in the project, and the
-  /// native `geocoding` plugin is mobile-only (no Flutter Web support),
-  /// so this uses a plain HTTP call to stay consistent with the rest of
-  /// this task's no-API-key, cross-platform OSM approach.
-  /// Returns null when no city could be determined (network error, timeout,
-  /// or a location with no city/town/village) — a distinct case from any
-  /// permission failure.
+
   Future<String?> reverseGeocodeCity(double lat, double lon) async {
     final uri = Uri.parse(
       'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=$lat&lon=$lon&zoom=10&accept-language=en',
@@ -171,9 +152,7 @@ class LocationService {
     }
   }
 
-  /// Admin event form: reverse-geocodes a map pin to its city and a street
-  /// address in one Nominatim call (zoom 18 = building level; the address
-  /// object still includes the city). Either part is null when missing.
+
   Future<({String? city, String? address})> reverseGeocodeAddress(double lat, double lon) async {
     final uri = Uri.parse(
       'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=$lat&lon=$lon&zoom=18&accept-language=en',

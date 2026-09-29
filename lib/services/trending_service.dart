@@ -4,17 +4,11 @@ import 'package:flutter/widgets.dart';
 import '../models/post.dart';
 import 'post_service.dart';
 
-/// Tracks the single "Trending Today" post: the active post with the most
-/// views today. Exactly one post (or none) holds the badge at a time.
-///
-/// One live query for the whole app (posts whose todayViewDate == today),
-/// re-subscribed when the local date changes, so a post that led yesterday
-/// never keeps the badge into a new day.
+
 class TrendingService {
   static final TrendingService instance = TrendingService._();
   TrendingService._();
 
-  /// Id of today's trending post, or null when nothing was viewed today.
   final ValueNotifier<String?> trendingPostId = ValueNotifier<String?>(null);
 
   StreamSubscription<List<Post>>? _sub;
@@ -49,9 +43,7 @@ class TrendingService {
     _midnight = Timer(nextMidnight.difference(now) + const Duration(seconds: 1), _subscribe);
   }
 
-  /// The one post with the highest view count today, or null. Ignores
-  /// inactive posts and anything not dated today. Ties go to the newer post
-  /// (then the id), so the choice is stable for every fan.
+
   static String? pickTrending(List<Post> posts, String today) {
     Post? best;
     for (final p in posts) {

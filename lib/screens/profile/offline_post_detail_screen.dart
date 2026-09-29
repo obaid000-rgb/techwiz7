@@ -2,10 +2,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import '../../services/auth_service.dart';
 import '../../services/bookmark_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/category_name.dart';
+import '../../utils/levels.dart';
 import '../../widgets/clip_player.dart';
+import '../../widgets/deep_dive_lock.dart';
 
 /// Renders a bookmarked post's saved copy entirely from the device — no
 /// network calls — so it works with no connection at all: cover, text,
@@ -54,6 +57,15 @@ class OfflinePostDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final post = copy.post;
+    // Same Deep Dive gate as Content Detail: a saved copy of a Deep Dive
+    // post (bookmarked before the lock, or by an admin account on this
+    // phone) never shows its body, media, clip or audio below Level
+    // DEEP_DIVE_LEVEL.
+    if (isDeepDiveLockedFor(post, AuthService.instance.currentUser)) {
+      final coverPath = copy.coverPath ?? copy.videoThumbnailPath;
+      return DeepDiveLockedView(
+          post: post, cover: coverPath == null || kIsWeb ? null : FileImage(File(coverPath)));
+    }
     final gallery = post.mediaUrls;
     final meta = [
       if (post.fandomName.isNotEmpty) post.fandomName,

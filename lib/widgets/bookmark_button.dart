@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/bookmark_store.dart';
 import '../services/user_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/levels.dart';
 
 /// Bookmark or unbookmark [post] (signed-in users only, as before). A
 /// bookmark is also an offline copy: bookmarking saves the post and its
@@ -20,6 +21,8 @@ Future<void> setPostBookmarked(BuildContext context, Post post, bool bookmark,
     messenger?.showSnackBar(const SnackBar(content: Text('Log in to bookmark posts.')));
     return;
   }
+  // A locked Deep Dive post can't be saved (the copy would hold its body).
+  if (bookmark && isDeepDiveLockedFor(post, user)) return;
   if (user.bookmarkedPostIds.contains(post.id) == bookmark) return;
   final ids = List<String>.from(user.bookmarkedPostIds);
   bookmark ? ids.add(post.id) : ids.remove(post.id);
@@ -64,6 +67,9 @@ class BookmarkButton extends StatelessWidget {
           valueListenable: BookmarkStore.instance.downloading,
           builder: (context, downloading, _) {
             final saved = user?.bookmarkedPostIds.contains(post.id) ?? false;
+            // Hidden on Deep Dive posts the viewer can't open yet (a post
+            // already saved can still be un-bookmarked).
+            if (!saved && isDeepDiveLockedFor(post, user)) return const SizedBox(width: 44, height: 44);
             final busy = saved && downloading.contains(post.id);
             return SizedBox(
               width: 44,

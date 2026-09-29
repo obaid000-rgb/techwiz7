@@ -39,8 +39,6 @@ class OnboardingSlideService {
   Future<void> deleteSlide(String id) =>
       FirestoreDb.instance.collection(_collection).doc(id).delete();
 
-  /// Persists a new display order for a full, freshly-ordered list of slides
-  /// (index in the list becomes its `order` value).
   Future<void> reorderSlides(List<OnboardingSlide> orderedSlides) async {
     final batch = FirestoreDb.instance.batch();
     for (var i = 0; i < orderedSlides.length; i++) {

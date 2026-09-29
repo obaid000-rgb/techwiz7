@@ -5,8 +5,7 @@ import 'firestore_db.dart';
 
 enum InquiryResult { sent, queuedOffline }
 
-/// Contact Us submissions, stored in the `inquiries` collection (admins read
-/// them in the admin Inquiries screen; anyone, including guests, can send one).
+
 class InquiryService {
   static final InquiryService instance = InquiryService._();
   InquiryService._();
@@ -14,8 +13,7 @@ class InquiryService {
   static const Duration _serverWait = Duration(seconds: 12);
 
   /// Returns [InquiryResult.queuedOffline] if the server didn't confirm in
-  /// time: Firestore keeps the write queued on the device and sends it when
-  /// the connection returns, so the user shouldn't send it again.
+  /// 
   Future<InquiryResult> submit({
     required String name,
     required String email,

@@ -1,5 +1,6 @@
 import '../../models/fandom.dart';
 import '../../models/post.dart';
+import '../../utils/levels.dart';
 import '../../utils/tag_utils.dart';
 
 class FandomTab {
@@ -26,7 +27,7 @@ class FandomPageController {
       FandomTab('beginner', 'Beginner',
           posts.where((p) => p.contentDepth == 'beginner').toList()),
       FandomTab('deep', 'Deep Dive',
-          posts.where((p) => p.contentDepth == 'deep').toList()),
+          posts.where(isDeepDive).toList()),
       for (final type in kPostContentTypes)
         FandomTab(type, type,
             posts.where((p) => p.contentType == type).toList()),

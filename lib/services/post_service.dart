@@ -30,46 +30,13 @@ class PostService {
     return null;
   });
 
-  /// Today's date as stored in `todayViewDate` ("yyyy-MM-dd", device-local).
   static String todayKey([DateTime? now]) {
     final d = now ?? DateTime.now();
     return '${d.year.toString().padLeft(4, '0')}-'
         '${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }
 
-  /// Counts one view of [postId] for today (Trending Today).
-  ///
-  /// This must be a transaction, not a plain update: the new value depends
-  /// on what's stored. If the stored day is today we add 1; if it's any
-  /// other day, yesterday's count is stale and we restart at 1 with today's
-  /// date. Done as a separate read then write, two fans viewing at the same
-  /// moment could both read "yesterday", both write count = 1, and lose a
-  /// view — or one could increment a count the other just reset. A
-  /// transaction makes read → compare → reset-or-increment atomic: if the
-  /// document changes between our read and our write, Firestore re-runs the
-  /// whole function against the fresh value.
-  ///
-  /// (FieldValue.increment alone can't express this: it can't reset to 1 on
-  /// a new day.)
-  ///
-  /// Two details make this hold up under real contention:
-  /// - Same day, the transaction writes FieldValue.increment(1) rather than
-  ///   a computed number, so the server adds 1 to whatever is stored at
-  ///   commit time. A computed "stale + 1" would be rejected by the security
-  ///   rule (which requires exactly stored + 1) as PERMISSION_DENIED, and
-  ///   that error is not retried by the SDK — the view would be lost.
-  /// - At a day rollover two fans can both read "yesterday" and both try to
-  ///   reset to 1; the rule rejects the second reset (the date already
-  ///   matches), so we retry: the retry reads today's date and increments.
-  ///
-  /// Merged view counting (Resources R1): the SAME transaction also adds 1
-  /// to the all-time viewCount — one write per view, never a second one.
-  /// Both counters move together, and FieldValue.increment(1) makes the
-  /// all-time +1 exact under contention, which the posts rule requires.
-  /// A post is counted at most once per app session: [_viewedThisSession]
-  /// remembers it (in memory only), so reopening a post doesn't recount,
-  /// for Trending Today or for viewCount. A failed write forgets the post
-  /// again so a later open can still count it.
+ 
   static final Set<String> _viewedThisSession = {};
 
   @visibleForTesting
@@ -103,12 +70,13 @@ class PostService {
     }
   }
 
-  /// Posts viewed today (single-field equality — no composite index). The
-  /// caller picks the top one; see TrendingService.
+
   Stream<List<Post>> watchViewedToday(String today) => FirestoreDb.instance
       .collection('posts')
+
       .where('todayViewDate', isEqualTo: today)
       .snapshots()
+
       .map((s) => s.docs.map((d) => Post.fromMap(d.data(), d.id)).toList());
 
   Stream<List<Post>> watchPostsInFandoms(List<String> fandomIds) =>
@@ -118,13 +86,15 @@ class PostService {
           .snapshots()
           .map((s) => s.docs.map((d) => Post.fromMap(d.data(), d.id)).toList());
 
-  /// A creator's active posts, newest first: a single where on creatorId,
-  /// with the active filter and the sort done on the device.
+
   Stream<List<Post>> watchPostsByCreator(String creatorId) => FirestoreDb.instance
       .collection('posts')
       .where('creatorId', isEqualTo: creatorId)
+
       .snapshots()
+
       .map((s) => s.docs
+
           .map((d) => Post.fromMap(d.data(), d.id))
           .where((p) => p.isActive)
           .toList()
@@ -140,11 +110,8 @@ class PostService {
               ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
       );
 
-  /// Creates or updates [post]. Returns the post's document id.
-  ///
-  /// [post].isFandomOfTheDay is written as-is. When it is true, every other
-  /// flagged post is unflagged in the SAME batch, so the save and the
-  /// "exactly zero or one Today's Fandom" rule commit together or not at all.
+
+
   Future<String> savePost(Post post, {required bool isNew}) async {
     final db = FirestoreDb.instance;
     final posts = db.collection('posts');
@@ -179,9 +146,10 @@ class PostService {
 
   Future<void> updatePost(Post post) {
     final data = post.toMap();
+
     if (!post.hasVideo) {
-      // toMap() omits youtubeUrl when null, which would leave a stale
-      // value in Firestore on a plain update() — delete it explicitly.
+
+
       data['youtubeUrl'] = FieldValue.delete();
     }
     return FirestoreDb.instance.collection('posts').doc(post.id).update(data);
@@ -190,8 +158,8 @@ class PostService {
   Future<void> deletePost(String id) =>
       FirestoreDb.instance.collection('posts').doc(id).delete();
 
-  /// Flags [postId] as Today's Fandom and unflags every other post,
-  /// so exactly zero or one post ever has the flag set.
+
+
   Future<void> setFandomOfTheDay(String postId) async {
     final currentlyFlagged = await FirestoreDb.instance
         .collection('posts')

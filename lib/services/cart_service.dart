@@ -15,8 +15,6 @@ class CartService {
       .map((s) => s.docs.map((d) => CartItem.fromMap(d.data(), d.id)).toList()
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase())));
 
-  /// Adds [quantity] of [product]; if it's already in the cart the quantity
-  /// is increased and its name/price/image refreshed to the current values.
   Future<void> addToCart(String uid, Merchandise product, {int quantity = 1}) =>
       _cart(uid).doc(product.id).set({
         'productId': product.id,

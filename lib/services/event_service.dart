@@ -80,6 +80,11 @@ class EventService {
       .doc(id)
       .update({'isPublished': published, 'updatedAt': FieldValue.serverTimestamp()});
 
+  /// Admin: removes an event for good (admin-only in firestore.rules).
+  /// Fans who saved it keep their offline copy in My Agenda, marked "no
+  /// longer listed".
+  Future<void> deleteEvent(String id) => FirestoreDb.instance.collection('events').doc(id).delete();
+
   /// One event, live (Event Detail's "X interested" and save state).
   Stream<EventItem?> watchEvent(String id) => FirestoreDb.instance
       .collection('events')

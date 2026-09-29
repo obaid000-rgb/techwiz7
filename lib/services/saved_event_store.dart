@@ -11,14 +11,12 @@ import 'event_service.dart';
 class SavedEventEntry {
   final String uid;
   final EventItem event;
-  /// Cover image downloaded to a local file (null when there's no cover,
-  /// the download failed, or on web).
+
   final String? imagePath;
-  /// Web has no file system: the cover is kept as bytes in the record.
+
   final Uint8List? imageBytes;
   final DateTime savedAt;
-  /// The event was unpublished or deleted after the fan saved it. The copy
-  /// is kept so the fan can still see what it was.
+
   final bool noLongerListed;
 
   const SavedEventEntry({
@@ -69,11 +67,7 @@ class SavedEventEntry {
 
 enum AgendaSyncResult { synced, offline }
 
-/// Offline copies of the events a fan saved to My Agenda (SRS: "event
-/// agendas must support offline access via local storage syncing").
-/// One Hive record per (account, event) holds every event field, the
-/// agenda and updatedAt; the cover image is downloaded to a local file,
-/// like offline posts download theirs. My Agenda reads only from here.
+
 class SavedEventStore {
   static const boxName = 'saved_events';
   static final SavedEventStore instance = SavedEventStore._();
@@ -98,8 +92,7 @@ class SavedEventStore {
     return v is Map ? SavedEventEntry.fromMap(v) : null;
   }
 
-  /// Where cover images live: a folder beside the Hive files (the app's
-  /// documents directory), so no extra plugin is needed.
+ 
   Future<Directory?> _imageDir() async {
     if (kIsWeb) return null;
     final path = (await _box()).path;
@@ -109,8 +102,7 @@ class SavedEventStore {
     return dir;
   }
 
-  /// Downloads [url]; returns (file path, bytes-for-web). Failures return
-  /// nulls so the text copy is still saved without its image.
+  
   Future<(String?, Uint8List?)> _download(String uid, String eventId, String url) async {
     if (url.isEmpty) return (null, null);
     try {
@@ -168,18 +160,7 @@ class SavedEventStore {
     await (await _box()).delete(_key(uid, eventId));
   }
 
-  /// Sync, run when My Agenda opens. For each saved event it asks the
-  /// server (never the local cache):
-  ///  - no internet (timeout / unavailable) -> stop, keep every copy as is,
-  ///    and report [AgendaSyncResult.offline];
-  ///  - event deleted or unpublished -> keep the copy, mark it
-  ///    "no longer listed" (the fan still sees what it was);
-  ///  - event's updatedAt newer than the copy's -> refresh the copy and
-  ///    re-download its image (an admin edited it, e.g. the agenda);
-  ///  - otherwise only the interested count is refreshed.
-  /// It also brings the copies in line with [savedIds] (the account's saved
-  /// list): events saved on another device get a copy, and copies of events
-  /// unsaved elsewhere are removed.
+ 
   Future<AgendaSyncResult> sync(String uid, List<String> savedIds) async {
     final entries = {for (final e in await entriesFor(uid)) e.event.id: e};
     final box = await _box();
